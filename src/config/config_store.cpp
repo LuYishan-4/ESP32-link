@@ -78,6 +78,26 @@ bool ConfigStore::load(NodeConfig& cfg) {
     s = prefs.getString("hostToken", cfg.hostToken);
     strlcpy(cfg.hostToken, s.c_str(), sizeof(cfg.hostToken));
   }
+  if (prefs.isKey("masterId")) {
+    s = prefs.getString("masterId", cfg.masterId);
+    strlcpy(cfg.masterId, s.c_str(), sizeof(cfg.masterId));
+  }
+  if (prefs.isKey("enrollTok")) {
+    s = prefs.getString("enrollTok", cfg.enrollToken);
+    strlcpy(cfg.enrollToken, s.c_str(), sizeof(cfg.enrollToken));
+  }
+  if (prefs.isKey("mqttUser")) {
+    s = prefs.getString("mqttUser", cfg.mqttUser);
+    strlcpy(cfg.mqttUser, s.c_str(), sizeof(cfg.mqttUser));
+  }
+  if (prefs.isKey("nodeLabel")) {
+    s = prefs.getString("nodeLabel", cfg.nodeLabel);
+    strlcpy(cfg.nodeLabel, s.c_str(), sizeof(cfg.nodeLabel));
+  }
+  if (prefs.isKey("slaveTok")) {
+    s = prefs.getString("slaveTok", cfg.slaveToken);
+    strlcpy(cfg.slaveToken, s.c_str(), sizeof(cfg.slaveToken));
+  }
 
   prefs.end();
   return true;
@@ -106,6 +126,11 @@ bool ConfigStore::save(const NodeConfig& cfg) {
   prefs.putBool("hostEnabled", cfg.hostEnabled);
   prefs.putString("hostUrl", cfg.hostUrl);
   prefs.putString("hostToken", cfg.hostToken);
+  prefs.putString("masterId", cfg.masterId);
+  prefs.putString("enrollTok", cfg.enrollToken);
+  prefs.putString("mqttUser", cfg.mqttUser);
+  prefs.putString("nodeLabel", cfg.nodeLabel);
+  prefs.putString("slaveTok", cfg.slaveToken);
 
   prefs.end();
   return true;

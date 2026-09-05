@@ -104,10 +104,15 @@ static String configToJson(NetworkHandler& net) {
   doc["ap_psk"]         = c.apPsk;
   doc["adv_set"]        = c.advPwSet;
 
-  // Telemetry host upload (SQL ingest) settings.
+  // Telemetry host upload (MQTT WSS backend) settings.
   doc["host_enabled"]   = c.hostEnabled;
   doc["host_url"]       = c.hostUrl;
   doc["host_token"]     = c.hostToken;
+  doc["master_id"]      = c.masterId;
+  doc["enroll_token"]   = c.enrollToken;
+  doc["mqtt_user"]      = c.mqttUser;
+  doc["node_label"]     = c.nodeLabel;
+  doc["slave_token"]    = c.slaveToken;
 
   String out;
   serializeJson(doc, out);
@@ -181,6 +186,11 @@ void registerApiRoutes(AsyncWebServer& server, AsyncWebSocket& ws, NetworkHandle
       if (o.containsKey("host_enabled")) c.hostEnabled = o["host_enabled"] | false;
       if (o.containsKey("host_url"))     strlcpy(c.hostUrl, o["host_url"] | "", sizeof(c.hostUrl));
       if (o.containsKey("host_token"))   strlcpy(c.hostToken, o["host_token"] | "", sizeof(c.hostToken));
+      if (o.containsKey("master_id"))    strlcpy(c.masterId, o["master_id"] | "", sizeof(c.masterId));
+      if (o.containsKey("enroll_token")) strlcpy(c.enrollToken, o["enroll_token"] | "", sizeof(c.enrollToken));
+      if (o.containsKey("mqtt_user"))    strlcpy(c.mqttUser, o["mqtt_user"] | "", sizeof(c.mqttUser));
+      if (o.containsKey("node_label"))   strlcpy(c.nodeLabel, o["node_label"] | "", sizeof(c.nodeLabel));
+      if (o.containsKey("slave_token"))  strlcpy(c.slaveToken, o["slave_token"] | "", sizeof(c.slaveToken));
 
       net.saveConfig();
       req->send(200, "application/json", "{\"ok\":true}");

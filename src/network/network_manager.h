@@ -14,6 +14,7 @@
 #include "../network/sta_controller.h"
 #include "../hardware/sensor_driver.h"
 #include "../datapacket/datapacket.h"
+#include "../mqtt/mqtt_ws.h"
 
 enum class NetState : uint8_t {
   BOOT, CONFIG_LOAD, SETUP, MASTER_INIT, SLAVE_INIT, RUNNING
@@ -106,10 +107,37 @@ private:
   static constexpr uint32_t TELEMETRY_INTERVAL_MS = 10000;
   static constexpr uint32_t HEARTBEAT_INTERVAL_MS = 15000;
 
-  static constexpr size_t TELEMETRY_RING = 16;
+  static constexpr size_t TELEMETRY_RING = 64;
   TelemetryEntry _ring[TELEMETRY_RING];
   size_t _ringHead  = 0;
   size_t _ringCount = 0;
+
+  // ---- Backend (MQTT over WSS) reporting, master only ----
+  MqttWs     _mqtt;
+  uint32_t   _mNextActMs   = 0;    // throttle reconnect / enroll retries
+  uint32_t   _mBatchNextMs = 0;    // next 5-minute batch time (ms)
+  uint32_t   _mSentUntil   = 0;    // unix seconds up to which readings were published
+  bool       _mStarted     = false;
+
+  void backendLoop();
+  bool backendEnroll();       // POST device/master-enrollments, save mqtt password
+  bool backendEnsureConnect();
+  void backendPublishBatch(); // every 5 min: QoS1 publish readings batch
+
+  // ---- Slave auto-binding: master enrolls on its slaves' behalf ----
+  char   _enrolled[4][DP_NODEID_LEN + 1];
+  size_t _enrolledN = 0;
+  char   _pendId[4][DP_NODEID_LEN + 1];
+  char   _pendLabel[4][DP_LABEL_LEN + 1];
+  char   _pendTok[4][DP_ENROLL_LEN + 1];
+  size_t _pendN   = 0;
+  uint32_t _mSlaveNextMs = 0;   // throttle for pending-slave flush
+  bool     _mNetLogged   = false;
+
+  bool isSlaveEnrolled(const char* id) const;
+  void onSlaveHello(const char* id, const char* label, const char* token);
+  bool slaveEnroll(const char* id, const char* label, const char* token);
+  void flushPendingSlaves();
 
   void loadConfig();
   void startSetupMode();

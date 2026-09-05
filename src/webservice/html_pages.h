@@ -133,6 +133,11 @@ fieldset { padding:0; margin:0; border:0; } .mode-fieldset { margin: 25px 0 2px;
                 <small>限 8 字元內英數與 - _</small></label>
               <label class="field slave-only" hidden><span>主機 Node ID</span>
                 <input id="targetId" name="targetId" type="text" maxlength="8" placeholder="主機的 Node ID" /></label>
+              <label class="field slave-only" hidden><span>盆栽 / 節點名稱</span>
+                <input id="nodeLabel" name="nodeLabel" type="text" maxlength="48" placeholder="Pot A" /></label>
+              <label class="field slave-only" hidden><span>Transfer token（綁定用）</span>
+                <div class="password-field"><input id="slaveTok" type="password" autocomplete="off" /><button class="reveal-button" type="button" data-target="slaveTok">顯示</button></div>
+                <small>連上主機時自動交給主機代送綁定</small></label>
               <label class="field"><span>群組密碼 (連 NODE 網路)</span>
                 <div class="password-field"><input id="apPsk" name="apPsk" type="password" maxlength="64" /><button class="reveal-button" type="button" data-target="apPsk">顯示</button></div>
                 <small>主機與從機共用，也是 Wi-Fi 密碼</small></label>
@@ -160,11 +165,14 @@ fieldset { padding:0; margin:0; border:0; } .mode-fieldset { margin: 25px 0 2px;
             <div class="fields">
               <label class="field" style="display:flex;align-items:center;gap:8px;flex-direction:row">
                 <input type="checkbox" id="hostEnabled" style="width:auto"> 啟用上傳到 Host</label>
-              <label class="field"><span>Host URL（含 IP）</span>
-                <input id="hostUrl" type="text" placeholder="http://192.168.1.50:3000/api/ingest" /></label>
-              <label class="field"><span>API Token <i>選填</i></span>
-                <div class="password-field"><input id="hostToken" type="password" autocomplete="off" /><button class="reveal-button" type="button" data-target="hostToken">顯示</button></div>
-                <small>非空時以 Authorization: Bearer 送出</small></label>
+              <label class="field"><span>Broker URL（WSS）</span>
+                <input id="hostUrl" type="text" placeholder="wss://mqtt.rabbitsayhello.me/" /></label>
+              <label class="field"><span>MQTT 密碼 <i>enrollment 取得</i></span>
+                <div class="password-field"><input id="hostToken" type="password" autocomplete="off" /><button class="reveal-button" type="button" data-target="hostToken">顯示</button></div></label>
+              <label class="field"><span>Master ID</span>
+                <input id="masterId" type="text" maxlength="32" placeholder="master-001" /></label>
+              <label class="field"><span>Enrollment token（一次性）</span>
+                <div class="password-field"><input id="enrollToken" type="password" autocomplete="off" /><button class="reveal-button" type="button" data-target="enrollToken">顯示</button></div></label>
             </div>
           </div>
 
@@ -244,8 +252,12 @@ function fillForm(c){
   $("relay").value = String(c.relay || 0);
   $("relayThr").value = c.relay_threshold != null ? c.relay_threshold : "";
   $("hostEnabled").checked = !!c.host_enabled;
-  $("hostUrl").value = c.host_url || "";
+  $("hostUrl").value = c.host_url || "wss://mqtt.rabbitsayhello.me/";
   $("hostToken").value = c.host_token || "";
+  $("masterId").value = c.master_id || "master-001";
+  $("enrollToken").value = "";   // one-time token: never prefill from device
+  $("nodeLabel").value = c.node_label || "";
+  $("slaveTok").value = "";      // transfer token: never prefill from device
   refreshModeUI();
 }
 function collect(){
@@ -264,7 +276,11 @@ function collect(){
     ap_psk: $("apPsk").value.trim(),
     host_enabled: $("hostEnabled").checked,
     host_url: $("hostUrl").value.trim(),
-    host_token: $("hostToken").value
+    host_token: $("hostToken").value.trim(),
+    master_id: $("masterId").value.trim() || "master-001",
+    enroll_token: $("enrollToken").value.trim(),
+    node_label: $("nodeLabel").value.trim(),
+    slave_token: $("slaveTok").value.trim()
   };
 }
 function showPreview(c){ $("configJson").textContent = JSON.stringify(c, null, 2); }

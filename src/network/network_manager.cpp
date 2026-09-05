@@ -6,6 +6,58 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <esp_wifi.h>   // WIFI_POWER_8_5dBm for C3 SuperMini TX-power workaround
+#include <stdlib.h>
+#include <WiFiClientSecure.h>
+#include <esp_system.h>
+
+#include "../config/certs.h"
+
+// ---------------------------------------------------------------------------
+// Backend (MQTT over WSS) helpers
+// ---------------------------------------------------------------------------
+
+namespace {
+
+const char kEnrollUrl[] =
+    "https://hackathon.rabbitsayhello.me/v1/device/master-enrollments";
+const char kSlaveEnrollUrl[] =
+    "https://hackathon.rabbitsayhello.me/v1/device/slave-enrollments";
+
+bool parseWssUrl(const char* url, String& host, uint16_t& port, String& path) {
+  String u = url ? url : "";
+  if (!u.startsWith("wss://")) return false;
+  String rest = u.substring(6);
+  int slash = rest.indexOf('/');
+  host = rest;
+  path = "/";
+  if (slash >= 0) { host = rest.substring(0, slash); path = rest.substring(slash); }
+  port = 443;
+  int colon = host.indexOf(':');
+  if (colon >= 0) {
+    port = (uint16_t)atoi(host.substring(colon + 1).c_str());
+    host = host.substring(0, colon);
+    if (port == 0) port = 443;
+  }
+  return host.length() > 0;
+}
+
+String rfc3339(time_t t) {
+  struct tm* g = gmtime(&t);
+  char b[32];
+  snprintf(b, sizeof(b), "%04d-%02d-%02dT%02d:%02d:%02dZ",
+           g->tm_year + 1900, g->tm_mon + 1, g->tm_mday,
+           g->tm_hour, g->tm_min, g->tm_sec);
+  return String(b);
+}
+
+String makeMessageId(uint32_t t, uint32_t seq) {
+  char b[33];
+  snprintf(b, sizeof(b), "%08x%08x%08x%08x",
+           t, seq, (uint32_t)esp_random(), (uint32_t)esp_random());
+  return String(b);
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Verbose WiFi diagnostics (used heavily by SETUP mode)
@@ -236,8 +288,11 @@ void NetworkHandler::startMaster() {
     WiFi.config(IPAddress(_cfg.staticIp), IPAddress(_cfg.gateway), IPAddress(_cfg.subnet));
   }
 
-  // Optional upstream station (site router) for internet / SQL upload access.
+  // Optional upstream station for internet access (phone/laptop hotspot or a
+  // router). Required to reach the remote backend (MQTT over WSS).
   if (_cfg.upstreamSsid[0]) {
+    WiFi.setAutoReconnect(true);
+    WiFi.setSleep(false);   // keep STA alive for stable uploads
     WiFi.begin(_cfg.upstreamSsid, _cfg.upstreamPsk);
   }
 
@@ -298,6 +353,9 @@ void NetworkHandler::handleMasterLoop() {
     processPacket(buf, (size_t)len);
     len = _ap.readFrame(buf, sizeof(buf));
   }
+
+  // Master: backend (MQTT over WSS) enrollment / connect / batch upload.
+  backendLoop();
 }
 
 void NetworkHandler::handleSlaveLoop() {
@@ -395,11 +453,21 @@ void NetworkHandler::processPacket(const uint8_t* packet, size_t len) {
 // ---------------------------------------------------------------------------
 
 void NetworkHandler::handleHello(const uint8_t* p, size_t len) {
-  (void)len;
   char nodeId[DP_NODEID_LEN + 1];
   memcpy(nodeId, p + DP_OFFSET_NODEID, DP_NODEID_LEN);
   nodeId[DP_NODEID_LEN] = '\0';
   Serial.printf("[mesh] hello from %s\n", nodeId);
+
+  // A slave may attach {label, token}; the master then enrolls it automatically.
+  const size_t payloadLen = (len > DP_HEADER_SIZE + 4) ? len - DP_HEADER_SIZE - 4 : 0;
+  if (payloadLen > 0) {
+    DynamicJsonDocument doc(256);
+    if (!deserializeJson(doc, (const char*)(p + DP_OFFSET_PAYLOAD), payloadLen)) {
+      const char* label = doc["label"] | "";
+      const char* token = doc["token"] | "";
+      if (token && token[0]) onSlaveHello(nodeId, label, token);
+    }
+  }
 
   uint8_t ack[DP_MAX_PACKET_SIZE];
   size_t n = buildPacket(DP_TYPE_ACK, _cfg.nodeId, nullptr, 0, ack, sizeof(ack));
@@ -516,8 +584,20 @@ void NetworkHandler::handleConfigSet(const uint8_t* p, size_t len) {
 // ---------------------------------------------------------------------------
 
 void NetworkHandler::sendHello() {
+  uint8_t payload[DP_MAX_PAYLOAD];
+  size_t payloadLen = 0;
+
+  // Attach label + transfer token so the master can auto-enroll this slave.
+  if (_cfg.slaveToken[0] != '\0') {
+    StaticJsonDocument<256> doc;
+    doc["label"] = _cfg.nodeLabel;
+    doc["token"] = _cfg.slaveToken;
+    payloadLen = serializeJson(doc, (char*)payload, sizeof(payload));
+  }
+
   uint8_t packet[DP_MAX_PACKET_SIZE];
-  size_t n = buildPacket(DP_TYPE_HELLO, _cfg.nodeId, nullptr, 0, packet, sizeof(packet));
+  size_t n = buildPacket(DP_TYPE_HELLO, _cfg.nodeId, payload, payloadLen,
+                         packet, sizeof(packet));
   _sta.sendFrame(packet, n);
 }
 
@@ -607,7 +687,10 @@ void NetworkHandler::uploadToHost(const TelemetryEntry& e, size_t payloadSize) {
     e.ph, e.light, e.moisture, (unsigned)e.sensorType, (unsigned)payloadSize);
   Serial.println(sql);
 
-  if (_cfg.hostEnabled && _cfg.hostUrl[0] != '\0') {
+  // Legacy per-reading HTTP ingest — only used for http(s) URLs. The current
+  // backend uses MQTT over WSS (see backendLoop()), so wss:// URLs are skipped.
+  if (_cfg.hostEnabled && _cfg.hostUrl[0] != '\0' &&
+      strncmp(_cfg.hostUrl, "wss://", 6) != 0) {
     StaticJsonDocument<512> doc;
     doc["time"]          = e.time;
     doc["node_mac"]      = macStr;
@@ -646,6 +729,287 @@ bool NetworkHandler::telemetryAt(size_t i, TelemetryEntry& out) const {
   size_t idx = (_ringHead + TELEMETRY_RING - _ringCount + i) % TELEMETRY_RING;
   out = _ring[idx];
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Slave auto-binding: when a slave HELLOs with its token, the master calls
+// POST /v1/device/slave-enrollments on its behalf (spec §7).
+// ---------------------------------------------------------------------------
+
+bool NetworkHandler::isSlaveEnrolled(const char* id) const {
+  for (size_t i = 0; i < _enrolledN; i++) {
+    if (strcmp(_enrolled[i], id) == 0) return true;
+  }
+  return false;
+}
+
+void NetworkHandler::onSlaveHello(const char* id, const char* label, const char* token) {
+  if (_cfg.role != ROLE_MASTER || !_cfg.hostEnabled) return;
+  if (!id || !id[0] || !token || !token[0]) return;
+  if (isSlaveEnrolled(id)) return;
+
+  // Queue the slave so we can enroll it once the master has its own MQTT
+  // credentials (master enrollment must happen first).
+  auto pushPending = [&]() {
+    for (size_t i = 0; i < _pendN; i++) {
+      if (strcmp(_pendId[i], id) == 0) return;  // already queued
+    }
+    if (_pendN < 4) {
+      strlcpy(_pendId[_pendN], id, sizeof(_pendId[_pendN]));
+      strlcpy(_pendLabel[_pendN], label ? label : "", sizeof(_pendLabel[_pendN]));
+      strlcpy(_pendTok[_pendN], token, sizeof(_pendTok[_pendN]));
+      _pendN++;
+    }
+  };
+
+  if (_cfg.hostToken[0] == '\0') {
+    pushPending();          // master not enrolled yet -> try later
+  } else if (!slaveEnroll(id, label, token)) {
+    pushPending();          // transient failure -> retry later
+  }
+}
+
+bool NetworkHandler::slaveEnroll(const char* id, const char* label, const char* token) {
+  WiFiClientSecure sec;
+  sec.setCACert(CA_GTS_ROOT_R4);
+  sec.setTimeout(10);
+
+  HTTPClient http;
+  if (!http.begin(sec, kSlaveEnrollUrl)) return false;
+  http.addHeader("Content-Type", "application/json");
+
+  DynamicJsonDocument req(384);
+  req["slave_id"] = id;
+  req["master_id"] = _cfg.masterId;
+  req["node_label"] = label ? label : "";
+  req["transfer_token"] = token;
+  String body;
+  serializeJson(req, body);
+
+  const int code = http.POST(body);
+  http.end();
+
+  if (code == 201 || code == 409) {   // 409 = already bound -> treat as done
+    if (_enrolledN < 4) {
+      strlcpy(_enrolled[_enrolledN], id, sizeof(_enrolled[_enrolledN]));
+      _enrolledN++;
+    }
+    Serial.printf("[backend] slave %s auto-bound (HTTP %d)\n", id, code);
+    return true;
+  }
+  Serial.printf("[backend] slave %s enroll HTTP %d\n", id, code);
+  return false;
+}
+
+void NetworkHandler::flushPendingSlaves() {
+  if (_pendN == 0 || _cfg.hostToken[0] == '\0') return;
+
+  // Snapshot then clear; re-queue only transient failures.
+  char ids[4][DP_NODEID_LEN + 1];
+  char labels[4][DP_LABEL_LEN + 1];
+  char toks[4][DP_ENROLL_LEN + 1];
+  const size_t n = _pendN;
+  for (size_t i = 0; i < n; i++) {
+    strlcpy(ids[i], _pendId[i], sizeof(ids[i]));
+    strlcpy(labels[i], _pendLabel[i], sizeof(labels[i]));
+    strlcpy(toks[i], _pendTok[i], sizeof(toks[i]));
+  }
+  _pendN = 0;
+
+  for (size_t i = 0; i < n; i++) {
+    if (!isSlaveEnrolled(ids[i])) {
+      if (!slaveEnroll(ids[i], labels[i], toks[i])) {
+        // Keep for the next periodic retry (409/201 handling inside).
+        if (_pendN < 4) {
+          strlcpy(_pendId[_pendN], ids[i], sizeof(_pendId[_pendN]));
+          strlcpy(_pendLabel[_pendN], labels[i], sizeof(_pendLabel[_pendN]));
+          strlcpy(_pendTok[_pendN], toks[i], sizeof(_pendTok[_pendN]));
+          _pendN++;
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Backend reporting (MQTT over WSS) — master only. Called from handleMasterLoop.
+// ---------------------------------------------------------------------------
+
+void NetworkHandler::backendLoop() {
+  if (_cfg.role != ROLE_MASTER || !_cfg.hostEnabled) return;
+  if (_cfg.hostUrl[0] == '\0') return;
+
+  const uint32_t now = millis();
+  if (now < _mNextActMs) {
+    if (_mqtt.connected()) _mqtt.loop();
+    return;
+  }
+
+  const bool internet = (WiFi.status() == WL_CONNECTED);
+  if (!internet) {
+    if (!_mNetLogged) {
+      Serial.println("[backend] no internet yet - set master 'Wi-Fi \xe4\xb8\x8a\xe8\xa1\x8c' to a phone/laptop hotspot or router");
+      _mNetLogged = true;
+    }
+    _mNextActMs = now + 10000;
+    return;
+  }
+  if (_mNetLogged) {
+    Serial.println("[backend] internet up");
+    _mNetLogged = false;
+  }
+
+  // 1) Enroll once: need an enrollment token to obtain the MQTT password.
+  if (_cfg.hostToken[0] == '\0') {
+    if (_cfg.enrollToken[0] == '\0') {
+      Serial.println("[backend] no MQTT password and no enrollment token set");
+      _mNextActMs = now + 30000;
+      return;
+    }
+    if (backendEnroll()) {
+      Serial.println("[backend] enrolled: MQTT credentials saved to NVS");
+      flushPendingSlaves();
+    } else {
+      Serial.println("[backend] enroll failed, will retry");
+      _mNextActMs = now + 15000;
+      return;
+    }
+  }
+
+  // 2) Keep the WSS MQTT connection alive.
+  if (!_mqtt.connected()) {
+    if (backendEnsureConnect()) {
+      if (!_mStarted) {           // first-ever connect: baseline = now
+        _mStarted = true;
+        _mSentUntil = (uint32_t)time(nullptr);
+      }
+      // On later reconnects keep _mSentUntil so unsent readings are re-sent.
+      _mBatchNextMs = millis() + 5000;   // first batch shortly after connect
+    } else {
+      _mNextActMs = now + 15000;
+      return;
+    }
+  }
+  _mqtt.loop();
+
+  // 3) Every 5 minutes publish a QoS1 batch of accumulated readings.
+  if (now >= _mBatchNextMs) {
+    _mBatchNextMs = now + 5UL * 60UL * 1000UL;
+    if ((time_t)time(nullptr) > 1600000000) {
+      backendPublishBatch();
+    } else {
+      Serial.println("[backend] clock not synced yet, batch skipped");
+    }
+  }
+  if (_pendN > 0 && now >= _mSlaveNextMs) {
+    flushPendingSlaves();
+    _mSlaveNextMs = now + 60000;
+  }
+  _mNextActMs = millis() + 1000;
+}
+
+bool NetworkHandler::backendEnroll() {
+  WiFiClientSecure sec;
+  sec.setCACert(CA_GTS_ROOT_R4);
+  sec.setTimeout(10);
+
+  HTTPClient http;
+  if (!http.begin(sec, kEnrollUrl)) {
+    Serial.println("[backend] enroll begin failed");
+    return false;
+  }
+  http.addHeader("Content-Type", "application/json");
+
+  DynamicJsonDocument req(256);
+  req["master_id"] = _cfg.masterId;
+  req["enrollment_token"] = _cfg.enrollToken;
+  String body;
+  serializeJson(req, body);
+
+  const int code = http.POST(body);
+  if (code != 201) {
+    Serial.printf("[backend] enroll HTTP %d\n", code);
+    http.end();
+    return false;
+  }
+
+  DynamicJsonDocument resp(512);
+  if (deserializeJson(resp, http.getString())) { http.end(); return false; }
+  http.end();
+
+  const char* user = resp["mqtt_username"] | "";
+  const char* pass = resp["mqtt_password"] | "";
+  if (!pass || !pass[0]) return false;
+
+  strlcpy(_cfg.mqttUser, (user && user[0]) ? user : _cfg.masterId,
+          sizeof(_cfg.mqttUser));
+  strlcpy(_cfg.hostToken, pass, sizeof(_cfg.hostToken));
+  _cfg.enrollToken[0] = '\0';   // one-time token is consumed
+  ConfigStore::save(_cfg);
+  return true;
+}
+
+bool NetworkHandler::backendEnsureConnect() {
+  String host, path;
+  uint16_t port = 443;
+  if (!parseWssUrl(_cfg.hostUrl, host, port, path)) {
+    Serial.printf("[backend] invalid broker url: %s\n", _cfg.hostUrl);
+    return false;
+  }
+  const char* user = _cfg.mqttUser[0] ? _cfg.mqttUser : _cfg.masterId;
+
+  _mqtt.begin(host.c_str(), port, path.c_str());
+  _mqtt.setAuth(_cfg.masterId, user, _cfg.hostToken); // clientId = master_id
+  if (_mqtt.connect(15000)) {
+    Serial.printf("[backend] MQTT connected: wss://%s:%u%s (client %s)\n",
+                  host.c_str(), (unsigned)port, path.c_str(), _cfg.masterId);
+    return true;
+  }
+  Serial.println("[backend] MQTT connect failed");
+  return false;
+}
+
+void NetworkHandler::backendPublishBatch() {
+  const uint32_t nowSec = (uint32_t)time(nullptr);
+
+  DynamicJsonDocument batch(4096);
+  batch["message_id"] = makeMessageId(nowSec, 0);
+  batch["measured_at"] = rfc3339((time_t)nowSec);
+  batch["firmware_version"] = "esp32-master-1.0.0";
+  JsonArray readings = batch.createNestedArray("readings");
+
+  size_t count = 0;
+  for (size_t i = 0; i < _ringCount && count < 16; i++) {
+    TelemetryEntry e;
+    if (!telemetryAt(i, e)) continue;
+    if (e.time <= _mSentUntil) continue;   // already published
+
+    JsonObject r = readings.createNestedObject();
+    r["slave_id"] = e.nodeId;
+    r["ph"] = e.ph;
+    r["ec_ms_per_cm"] = 0.0;                       // no EC sensor on board yet
+    r["light_lux"] = e.light;
+    r["soil_moisture_percent"] = e.moisture;
+    r["calibration_version"] = "1.0";
+    r["firmware_version"] = "esp32-slave-1.0.0";
+    count++;
+  }
+
+  if (count == 0) {
+    _mSentUntil = nowSec;
+    return;
+  }
+
+  String topic = String("farm/v1/masters/") + _cfg.masterId + "/telemetry";
+  String payload;
+  serializeJson(batch, payload);
+
+  const bool ok = _mqtt.publish(topic.c_str(), payload);
+  Serial.printf("[backend] publish %s batch(%u) topic=%s payload=%s\n",
+                ok ? "OK" : "FAIL", (unsigned)count, topic.c_str(),
+                payload.length() > 120 ? payload.substring(0, 120).c_str()
+                                       : payload.c_str());
+  if (ok) _mSentUntil = nowSec;
 }
 
 // ---------------------------------------------------------------------------
