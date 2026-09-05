@@ -11,6 +11,13 @@
 #define ROLE_MASTER  0
 #define ROLE_SLAVE   1
 
+// TEMP DEBUG: force boot into SETUP mode regardless of the GPIO6 strap, so the
+// verbose setup-mode WiFi diagnostics can be captured without holding a pin.
+// Set to 1 via build flag (-DFORCE_SETUP_MODE=1). REMOVE after debugging.
+#ifndef FORCE_SETUP_MODE
+#define FORCE_SETUP_MODE 0
+#endif
+
 // Unified hotspot SSID prefix. A relay re-broadcasts NODE_<targetId> so the
 // whole group stays one logical network (§2.2 / §10).
 #define AP_SSID_PREFIX     "NODE_"

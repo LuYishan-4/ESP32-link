@@ -22,7 +22,7 @@ void setup() {
   g_gpio.begin();
   // Boot-mode selection: if the setup GPIO is held at boot we enter SETUP
   // (batch-config) mode, otherwise normal Master/Slave operation.
-  bool setupMode = g_gpio.setupModeRequested();
+  bool setupMode = FORCE_SETUP_MODE || g_gpio.setupModeRequested();
   g_net.begin(setupMode);
   g_web.begin(g_net);
 

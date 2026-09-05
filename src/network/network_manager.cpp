@@ -5,6 +5,79 @@
 #include <string.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <esp_wifi.h>   // WIFI_POWER_8_5dBm for C3 SuperMini TX-power workaround
+
+// ---------------------------------------------------------------------------
+// Verbose WiFi diagnostics (used heavily by SETUP mode)
+// ---------------------------------------------------------------------------
+
+static const char* wifiStatusName(wl_status_t s) {
+  switch (s) {
+    case WL_IDLE_STATUS:     return "IDLE(0)";
+    case WL_NO_SSID_AVAIL:   return "NO_SSID_AVAIL(1)";
+    case WL_SCAN_COMPLETED:  return "SCAN_COMPLETED(2)";
+    case WL_CONNECTED:       return "CONNECTED(3)";
+    case WL_CONNECT_FAILED:  return "CONNECT_FAILED(4)";
+    case WL_CONNECTION_LOST: return "CONNECTION_LOST(5)";
+    case WL_DISCONNECTED:    return "DISCONNECTED(6)";
+    default:                 return "UNKNOWN";
+  }
+}
+
+// Map wl_status_t codes and common WiFi event reason codes to readable text.
+static const char* reasonName(int reason) {
+  switch (reason) {
+    case 1:  return "UNSPECIFIED";
+    case 2:  return "AUTH_EXPIRE";
+    case 3:  return "AUTH_LEAVE";
+    case 4:  return "ASSOC_EXPIRE";
+    case 15: return "4WAY_HANDSHAKE_TIMEOUT";
+    case 16: return "GROUP_KEY_UPDATE_TIMEOUT";
+    case 200:return "BEACON_TIMEOUT";
+    case 201:return "NO_AP_FOUND";
+    case 202:return "AUTH_FAIL";
+    case 203:return "ASSOC_FAIL";
+    case 204:return "HANDSHAKE_TIMEOUT";
+    default: return "?";
+  }
+}
+
+static void logWifiEvent(WiFiEvent_t ev) {
+  switch (ev) {
+    case ARDUINO_EVENT_WIFI_STA_START:          Serial.println("[wifi] event STA_START"); break;
+    case ARDUINO_EVENT_WIFI_STA_STOP:           Serial.println("[wifi] event STA_STOP"); break;
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:         Serial.printf("[wifi] event STA_GOT_IP ip=%s\n", WiFi.localIP().toString().c_str()); break;
+    case ARDUINO_EVENT_WIFI_STA_LOST_IP:        Serial.println("[wifi] event STA_LOST_IP"); break;
+    case ARDUINO_EVENT_WIFI_AP_START:           Serial.println("[wifi] event AP_START"); break;
+    case ARDUINO_EVENT_WIFI_AP_STOP:            Serial.println("[wifi] event AP_STOP"); break;
+    case ARDUINO_EVENT_WIFI_AP_STACONNECTED:    Serial.println("[wifi] event AP_CLIENT_JOINED"); break;
+    case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED: Serial.println("[wifi] event AP_CLIENT_LEFT"); break;
+    default: break;
+  }
+}
+
+static void installWifiEventLog() {
+  static bool installed = false;
+  if (installed) return;
+  installed = true;
+  WiFi.onEvent([](WiFiEvent_t ev, WiFiEventInfo_t info) {
+    switch (ev) {
+      case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+        Serial.printf("[wifi] event STA_CONNECTED ch=%d auth=%d\n",
+                      info.wifi_sta_connected.channel,
+                      (int)info.wifi_sta_connected.authmode);
+        break;
+      case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: {
+        int r = (int)info.wifi_sta_disconnected.reason;
+        Serial.printf("[wifi] event STA_DISCONNECTED reason=%d (%s) rssi=%d\n",
+                      r, reasonName(r), (int)info.wifi_sta_disconnected.rssi);
+        break;
+      }
+      default:
+        logWifiEvent(ev);
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -31,49 +104,97 @@ void NetworkHandler::loop() {
 void NetworkHandler::startSetupMode() {
   _state = NetState::SETUP;
   _ap.stop();
+  installWifiEventLog();
 
-  String setupSsid = String(AP_SSID_PREFIX) + _cfg.nodeId;   // NODE_<id>, open
+  Serial.println();
+  Serial.println("[setup] ================= SETUP MODE =================");
+  String setupSsid = String(AP_SSID_PREFIX) + _cfg.nodeId;   // NODE_<id>
   _apSsid = setupSsid;
+  Serial.printf("[setup] config AP ssid = '%s' | target STA net = '%s' (len %u)\n",
+                setupSsid.c_str(), SETUP_WIFI_SSID, (unsigned)strlen(SETUP_WIFI_SSID));
 
-  // ESP32-C3 has a SINGLE radio shared by AP and STA. Starting the softAP and
-  // then trying to associate the STA on a different channel makes the radio
-  // thrash channels: the STA gets AUTH_EXPIRE and the softAP beacon ends up on
-  // a channel no client is listening on (=> AP "invisible"). So join the fixed
-  // STA network FIRST, then bring the config AP up on the SAME channel.
-  bool haveWifi = false;
+  // --- 1) Standalone STA + explicit scan so we SEE whether ESP32_Host exists.
   WiFi.mode(WIFI_STA);
+  // ESP32-C3 SuperMini hardware/design workaround: at default TX power the
+  // radio doesn't reliably broadcast a softAP (and can fail STA auth with
+  // AUTH_EXPIRE). Lowering TX power fixes both. See espressif/arduino-esp32#6551.
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
+  Serial.printf("[setup] TX power set to %d dBm\n", (int)WiFi.getTxPower());
+  delay(300);
+  Serial.printf("[setup] mode after set=STA. Scanning for visible APs...\n");
+  int n = WiFi.scanNetworks();
+  Serial.printf("[setup] scan finished: %d AP(s) visible\n", n);
+  for (int i = 0; i < n; i++) {
+    String s = WiFi.SSID(i);
+    bool hit = (s == SETUP_WIFI_SSID);
+    Serial.printf(hit ? "[setup]   >>> TARGET '%s' ch=%d rssi=%ddBm auth=%d\n"
+                      : "[setup]       other '%s' ch=%d rssi=%ddBm auth=%d\n",
+                  s.c_str(), WiFi.channel(i), WiFi.RSSI(i),
+                  (int)WiFi.encryptionType(i));
+  }
+  WiFi.scanDelete();
+  if (n <= 0) Serial.println("[setup]   (nothing visible - is any AP broadcasting?)");
 
+  // --- 2) Try to join the fixed STA network (bounded, ~10 s).
+  bool haveWifi = false;
   if (SETUP_WIFI_SSID[0]) {
-    Serial.printf("[setup] joining fixed config wifi '%s'\n", SETUP_WIFI_SSID);
+    Serial.printf("[setup] begin() STA -> '%s' ...\n", SETUP_WIFI_SSID);
     WiFi.setAutoReconnect(false);
     WiFi.begin(SETUP_WIFI_SSID, SETUP_WIFI_PWD);
-    // Bounded wait so we don't block boot forever (~10 s max).
-    for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; i++) delay(250);
+    for (int i = 0; i < 40; i++) {
+      delay(250);
+      if (WiFi.status() == WL_CONNECTED) break;
+      if ((i % 4) == 0)
+        Serial.printf("[setup]   ...waiting, status=%s\n", wifiStatusName(WiFi.status()));
+    }
     haveWifi = (WiFi.status() == WL_CONNECTED);
     if (haveWifi) {
       _setupWifiAnnounced = true;
-      Serial.printf("[setup] connected to '%s', ip=%s\n",
-                    SETUP_WIFI_SSID, WiFi.localIP().toString().c_str());
+      Serial.printf("[setup] STA CONNECTED ip=%s ch=%d rssi=%d\n",
+                    WiFi.localIP().toString().c_str(), WiFi.channel(), WiFi.RSSI());
     } else {
-      Serial.printf("[setup] STA failed to join '%s' (status %d), continuing with AP only\n",
-                    SETUP_WIFI_SSID, (int)WiFi.status());
+      Serial.printf("[setup] STA NOT connected, final status=%s\n",
+                    wifiStatusName(WiFi.status()));
     }
   } else {
-    Serial.println("[setup] note: SETUP_WIFI_SSID empty, batch WiFi not joined");
+    Serial.println("[setup] SETUP_WIFI_SSID empty -> STA step skipped");
   }
 
-  // Bring up the visible, open config AP on the STA's channel (or channel 1).
+  // --- 3) Bring up the visible open config AP on the STA channel (or ch 1).
   WiFi.mode(WIFI_AP_STA);
   uint8_t ch = haveWifi ? (uint8_t)WiFi.channel() : 1;
   bool apOk = WiFi.softAP(setupSsid.c_str(), nullptr, ch, 0, 4);
-  Serial.printf("[setup] AP '%s' %s (ch %u, ip %s)\n",
-                setupSsid.c_str(), apOk ? "UP" : "FAILED", ch,
-                apOk ? WiFi.softAPIP().toString().c_str() : "-");
+  Serial.printf("[setup] softAP('%s', open, ch=%u) return=%d\n",
+                setupSsid.c_str(), ch, apOk ? 1 : 0);
+  delay(200);
+  if (apOk) {
+    Serial.printf("[setup] AP UP  ip=%s mac=%s  (getMode=0x%02x)\n",
+                  WiFi.softAPIP().toString().c_str(), WiFi.softAPmacAddress().c_str(),
+                  (unsigned)WiFi.getMode());
+  } else {
+    Serial.printf("[setup] AP FAILED to start (getMode=0x%02x)\n", (unsigned)WiFi.getMode());
+  }
+  Serial.println("[setup] ===============================================");
 }
 
 void NetworkHandler::handleSetupLoop() {
-  // The ESP32 STA auto-reconnects to the fixed WiFi once credentials are set;
-  // nothing extra to drive here. Web server & WS run independently in .ino.
+  // Live status every 5s so a silent failure is always visible on the monitor.
+  static uint32_t lastStat = 0;
+  uint32_t nowMs = millis();
+  if (nowMs - lastStat >= 5000) {
+    lastStat = nowMs;
+    wl_status_t st = WiFi.status();
+    bool apMode = (WiFi.getMode() & WIFI_AP) != 0;
+    int  clients = apMode ? WiFi.softAPgetStationNum() : -1;
+    Serial.printf("[setup] LIVE  STA=%s rssi=%d | AP_on=%d clients=%d | getMode=0x%02x\n",
+                  wifiStatusName(st), WiFi.RSSI(), apMode ? 1 : 0, clients,
+                  (unsigned)WiFi.getMode());
+    if (st == WL_CONNECTED)
+      Serial.printf("[setup]   STA ip=%s | AP ip=%s ch=%d\n",
+                    WiFi.localIP().toString().c_str(),
+                    WiFi.softAPIP().toString().c_str(), WiFi.channel());
+  }
+
   if (SETUP_WIFI_SSID[0] && WiFi.status() == WL_CONNECTED && !_setupWifiAnnounced) {
     _setupWifiAnnounced = true;
     Serial.printf("[setup] connected to '%s', ip=%s\n",
@@ -108,6 +229,8 @@ void NetworkHandler::requestRoleSwitch(uint8_t role) {
 void NetworkHandler::startMaster() {
   _state = NetState::MASTER_INIT;
   WiFi.mode(WIFI_AP_STA);
+  // C3 SuperMini: lower TX power so softAP is reliably broadcast (see #6551).
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
 
   if (_cfg.ipMode == DP_CFG_IPMODE_STATIC) {
     WiFi.config(IPAddress(_cfg.staticIp), IPAddress(_cfg.gateway), IPAddress(_cfg.subnet));
@@ -136,6 +259,8 @@ void NetworkHandler::startMaster() {
 void NetworkHandler::startSlave() {
   _state = NetState::SLAVE_INIT;
   WiFi.mode(WIFI_STA);
+  // C3 SuperMini: lower TX power so STA auth doesn't fail with AUTH_EXPIRE.
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
   _sta.begin(_cfg.targetId, _cfg.apPsk);
   _relayActive = false;
   _state = NetState::RUNNING;
