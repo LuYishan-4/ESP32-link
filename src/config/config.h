@@ -23,11 +23,12 @@
 #define AP_SSID_PREFIX     "NODE_"
 #define AP_SSID_PREFIX_LEN (sizeof(AP_SSID_PREFIX) - 1)
 
-// Optional: when non-empty, the Master POSTs telemetry JSON here in addition
-// to printing the SQL INSERT to Serial. Example: "http://192.168.1.100/api/ingest"
-#ifndef HOST_INGEST_URL
-#define HOST_INGEST_URL ""
-#endif
+// Host (SQL) upload — where the Master POSTs each telemetry packet as JSON.
+// Configured at runtime from the Settings page (URL/IP + API token), not as a
+// compile-time macro. When disabled the Master only prints the SQL INSERT to
+// Serial (§9).
+constexpr size_t DP_HOST_URL_LEN   = 160;   // e.g. "http://192.168.1.50:3000/api/ingest"
+constexpr size_t DP_HOST_TOKEN_LEN = 128;   // sent as "Authorization: Bearer <token>"
 
 // Fixed WiFi network the device joins when it boots into SETUP mode (GPIO held
 // at boot). This lets a technician's laptop on the same network reach every
@@ -62,4 +63,9 @@ struct NodeConfig {
   bool     relayEnabled  = false;
   bool     relayAuto     = false;
   uint16_t relayThreshold = 3;                               // auto-promote when AP nears N clients
+
+  // Master: telemetry host upload (SQL ingest).
+  bool    hostEnabled = false;
+  char    hostUrl[DP_HOST_URL_LEN + 1]     = "";   // full URL incl. host IP/port/path
+  char    hostToken[DP_HOST_TOKEN_LEN + 1] = "";   // API token (Authorization: Bearer)
 };

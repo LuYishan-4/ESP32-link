@@ -66,6 +66,14 @@ bool ConfigStore::load(NodeConfig& cfg) {
   cfg.relayAuto      = prefs.getBool("relayAuto", cfg.relayAuto);
   cfg.relayThreshold = prefs.getUShort("relayThr", cfg.relayThreshold);
 
+  cfg.hostEnabled = prefs.getBool("hostEnabled", cfg.hostEnabled);
+
+  s = prefs.getString("hostUrl", cfg.hostUrl);
+  strlcpy(cfg.hostUrl, s.c_str(), sizeof(cfg.hostUrl));
+
+  s = prefs.getString("hostToken", cfg.hostToken);
+  strlcpy(cfg.hostToken, s.c_str(), sizeof(cfg.hostToken));
+
   prefs.end();
   return true;
 }
@@ -89,6 +97,10 @@ bool ConfigStore::save(const NodeConfig& cfg) {
   prefs.putBool("relay", cfg.relayEnabled);
   prefs.putBool("relayAuto", cfg.relayAuto);
   prefs.putUShort("relayThr", cfg.relayThreshold);
+
+  prefs.putBool("hostEnabled", cfg.hostEnabled);
+  prefs.putString("hostUrl", cfg.hostUrl);
+  prefs.putString("hostToken", cfg.hostToken);
 
   prefs.end();
   return true;

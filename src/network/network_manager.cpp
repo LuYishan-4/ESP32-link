@@ -607,30 +607,34 @@ void NetworkHandler::uploadToHost(const TelemetryEntry& e, size_t payloadSize) {
     e.ph, e.light, e.moisture, (unsigned)e.sensorType, (unsigned)payloadSize);
   Serial.println(sql);
 
-#if defined(HOST_INGEST_URL)
-  if (HOST_INGEST_URL[0] != '\0') {   // runtime check: only POST if a URL is configured
-  StaticJsonDocument<512> doc;
-  doc["time"]          = e.time;
-  doc["node_mac"]      = macStr;
-  doc["node_id"]       = e.nodeId;
-  doc["path"]          = e.path;
-  doc["ph_value"]      = e.ph;
-  doc["light_level"]   = e.light;
-  doc["soil_moisture"] = e.moisture;
-  doc["sensor_type"]   = e.sensorType;
-  doc["payload_size"]  = payloadSize;
+  if (_cfg.hostEnabled && _cfg.hostUrl[0] != '\0') {
+    StaticJsonDocument<512> doc;
+    doc["time"]          = e.time;
+    doc["node_mac"]      = macStr;
+    doc["node_id"]       = e.nodeId;
+    doc["path"]          = e.path;
+    doc["ph_value"]      = e.ph;
+    doc["light_level"]   = e.light;
+    doc["soil_moisture"] = e.moisture;
+    doc["sensor_type"]   = e.sensorType;
+    doc["payload_size"]  = payloadSize;
 
-  String body;
-  serializeJson(doc, body);
+    String body;
+    serializeJson(doc, body);
 
-  HTTPClient http;
-  http.begin(HOST_INGEST_URL);
-  http.addHeader("Content-Type", "application/json");
-  int code = http.POST(body);
-  Serial.printf("[host] ingest %s -> HTTP %d\n", e.nodeId, code);
-  http.end();
+    HTTPClient http;
+    if (!http.begin(_cfg.hostUrl)) {
+      Serial.println("[host] begin failed (check URL)");
+      return;
+    }
+    http.addHeader("Content-Type", "application/json");
+    if (_cfg.hostToken[0] != '\0') {
+      http.addHeader("Authorization", String("Bearer ") + _cfg.hostToken);
+    }
+    int code = http.POST(body);
+    Serial.printf("[host] ingest %s -> HTTP %d\n", e.nodeId, code);
+    http.end();
   }
-#endif
 }
 
 void NetworkHandler::notifyDataCallback(const uint8_t* packet, size_t len) {

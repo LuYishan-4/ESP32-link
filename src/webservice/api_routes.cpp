@@ -88,7 +88,7 @@ String telemetryToJson(const uint8_t* p, size_t len) {
 
 static String configToJson(NetworkHandler& net) {
   NodeConfig& c = net.config();
-  DynamicJsonDocument doc(1024);
+  DynamicJsonDocument doc(2048);
 
   doc["role"]           = (c.role == ROLE_SLAVE) ? "slave" : "master";
   doc["node_id"]        = c.nodeId;
@@ -103,6 +103,11 @@ static String configToJson(NetworkHandler& net) {
   doc["relay_threshold"]= c.relayThreshold;
   doc["ap_psk"]         = c.apPsk;
   doc["adv_set"]        = c.advPwSet;
+
+  // Telemetry host upload (SQL ingest) settings.
+  doc["host_enabled"]   = c.hostEnabled;
+  doc["host_url"]       = c.hostUrl;
+  doc["host_token"]     = c.hostToken;
 
   String out;
   serializeJson(doc, out);
@@ -149,7 +154,7 @@ void registerApiRoutes(AsyncWebServer& server, AsyncWebSocket& ws, NetworkHandle
   server.on("/api/config", HTTP_POST,
     [](AsyncWebServerRequest*) {}, nullptr,
     [&net](AsyncWebServerRequest* req, uint8_t* data, size_t len, size_t, size_t) {
-      DynamicJsonDocument doc(1024);
+      DynamicJsonDocument doc(2048);
       if (deserializeJson(doc, (const char*)data, len)) {
         req->send(400, "application/json", "{\"ok\":false,\"err\":\"json\"}");
         return;
@@ -172,6 +177,10 @@ void registerApiRoutes(AsyncWebServer& server, AsyncWebSocket& ws, NetworkHandle
         c.relayEnabled = (r == 1 || r == 2);
       }
       if (o.containsKey("relay_threshold")) c.relayThreshold = o["relay_threshold"] | c.relayThreshold;
+
+      if (o.containsKey("host_enabled")) c.hostEnabled = o["host_enabled"] | false;
+      if (o.containsKey("host_url"))     strlcpy(c.hostUrl, o["host_url"] | "", sizeof(c.hostUrl));
+      if (o.containsKey("host_token"))   strlcpy(c.hostToken, o["host_token"] | "", sizeof(c.hostToken));
 
       net.saveConfig();
       req->send(200, "application/json", "{\"ok\":true}");

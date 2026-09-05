@@ -90,6 +90,19 @@ th{color:var(--muted)}
         <label>Gateway</label><input id="sGw" placeholder="192.168.1.1">
         <label>Subnet</label><input id="sMask" placeholder="255.255.255.0">
       </div>
+
+      <div id="hostFields">
+        <h3>Host upload (SQL)</h3>
+        <label style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="hostEnabled" style="width:auto"> Upload telemetry to host
+        </label>
+        <label>Host API URL</label>
+        <input id="hostUrl" placeholder="http://192.168.1.50:3000/api/ingest" maxlength="160">
+        <label>Host API token</label>
+        <input id="hostToken" type="password" autocomplete="off" maxlength="128">
+        <div class="note">Master POSTs each telemetry packet here as JSON; sent with
+          <code>Authorization: Bearer &lt;token&gt;</code> when the token is set.</div>
+      </div>
     </div>
     <div id="slaveFields" class="hidden">
       <label>Target Node ID</label>
@@ -184,6 +197,9 @@ async function loadConfig(){
   $('relay').value=String(c.relay);
   $('relayThr').value=c.relay_threshold;
   $('apPsk').value=c.ap_psk;
+  $('hostEnabled').checked=!!c.host_enabled;
+  $('hostUrl').value=c.host_url||'';
+  $('hostToken').value=c.host_token||'';
   onRole(); onIp();
 }
 
@@ -206,7 +222,10 @@ async function saveConfig(){
     gateway:$('sGw').value,
     subnet:$('sMask').value,
     relay:parseInt($('relay').value),
-    relay_threshold:parseInt($('relayThr').value)
+    relay_threshold:parseInt($('relayThr').value),
+    host_enabled:$('hostEnabled').checked,
+    host_url:$('hostUrl').value.trim(),
+    host_token:$('hostToken').value.trim()
   };
   const r=await jpost('/api/config',body);
   alert(r.ok?'Saved. Reboot to apply Wi-Fi changes.':'Save failed');
