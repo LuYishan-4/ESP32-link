@@ -160,6 +160,11 @@ void NetworkHandler::startSetupMode() {
     Serial.println("[setup] SETUP_WIFI_SSID empty -> STA step skipped");
   }
 
+  // Open the UDP 4210 link to the Windows host only AFTER WiFi/lwIP is up (a
+  // UDP socket opened before any WiFi.mode() crashes with "tcpip_send_msg_wait
+  // _sem (Invalid mbox)"). Registers via `hello` + handles `set_key`/`key_ack`.
+  _host.begin(_cfg.nodeId, "1.0.0");
+
   // --- 3) Bring up the visible open config AP on the STA channel (or ch 1).
   WiFi.mode(WIFI_AP_STA);
   uint8_t ch = haveWifi ? (uint8_t)WiFi.channel() : 1;
@@ -178,6 +183,8 @@ void NetworkHandler::startSetupMode() {
 }
 
 void NetworkHandler::handleSetupLoop() {
+  _host.loop();   // periodic hello + set_key/key_ack handling
+
   // Live status every 5s so a silent failure is always visible on the monitor.
   static uint32_t lastStat = 0;
   uint32_t nowMs = millis();
