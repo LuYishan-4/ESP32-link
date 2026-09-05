@@ -28,10 +28,10 @@ constexpr size_t DP_HOST_TOKEN_LEN = 128;   // sent as "Authorization: Bearer <t
 // device's web panel for batch configuration. Fill in the real values or pass
 // them via build flags (-DSETUP_WIFI_SSID=...).
 #ifndef SETUP_WIFI_SSID
-#define SETUP_WIFI_SSID "NODE_SETUP"
+#define SETUP_WIFI_SSID "ESP32_Host"
 #endif
 #ifndef SETUP_WIFI_PWD
-#define SETUP_WIFI_PWD   "NODE_SETUP_DEFAULT_PASSWORD"
+#define SETUP_WIFI_PWD   "12345678"
 #endif
 
 struct NodeConfig {

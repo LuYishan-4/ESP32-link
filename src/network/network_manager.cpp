@@ -32,23 +32,43 @@ void NetworkHandler::startSetupMode() {
   _state = NetState::SETUP;
   _ap.stop();
 
-  // Open + VISIBLE config AP so a phone/PC can reach this device's web panel
-  // directly. SSID is broadcast (not hidden) and has NO password.
   String setupSsid = String(AP_SSID_PREFIX) + _cfg.nodeId;   // NODE_<id>, open
-  WiFi.mode(WIFI_AP_STA);   // need AP (direct config) + STA (batch WiFi)
-  WiFi.softAP(setupSsid.c_str());           // empty passphrase => open network
   _apSsid = setupSsid;
-  Serial.printf("[setup] open AP '%s' (no password, visible)\n", setupSsid.c_str());
 
-  // Also try to join the fixed WiFi so the batch laptop can reach every
-  // device over one network for batch configuration.
+  // ESP32-C3 has a SINGLE radio shared by AP and STA. Starting the softAP and
+  // then trying to associate the STA on a different channel makes the radio
+  // thrash channels: the STA gets AUTH_EXPIRE and the softAP beacon ends up on
+  // a channel no client is listening on (=> AP "invisible"). So join the fixed
+  // STA network FIRST, then bring the config AP up on the SAME channel.
+  bool haveWifi = false;
+  WiFi.mode(WIFI_STA);
+
   if (SETUP_WIFI_SSID[0]) {
-    WiFi.begin(SETUP_WIFI_SSID, SETUP_WIFI_PWD);
-    WiFi.setAutoReconnect(true);
     Serial.printf("[setup] joining fixed config wifi '%s'\n", SETUP_WIFI_SSID);
+    WiFi.setAutoReconnect(false);
+    WiFi.begin(SETUP_WIFI_SSID, SETUP_WIFI_PWD);
+    // Bounded wait so we don't block boot forever (~10 s max).
+    for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; i++) delay(250);
+    haveWifi = (WiFi.status() == WL_CONNECTED);
+    if (haveWifi) {
+      _setupWifiAnnounced = true;
+      Serial.printf("[setup] connected to '%s', ip=%s\n",
+                    SETUP_WIFI_SSID, WiFi.localIP().toString().c_str());
+    } else {
+      Serial.printf("[setup] STA failed to join '%s' (status %d), continuing with AP only\n",
+                    SETUP_WIFI_SSID, (int)WiFi.status());
+    }
   } else {
     Serial.println("[setup] note: SETUP_WIFI_SSID empty, batch WiFi not joined");
   }
+
+  // Bring up the visible, open config AP on the STA's channel (or channel 1).
+  WiFi.mode(WIFI_AP_STA);
+  uint8_t ch = haveWifi ? (uint8_t)WiFi.channel() : 1;
+  bool apOk = WiFi.softAP(setupSsid.c_str(), nullptr, ch, 0, 4);
+  Serial.printf("[setup] AP '%s' %s (ch %u, ip %s)\n",
+                setupSsid.c_str(), apOk ? "UP" : "FAILED", ch,
+                apOk ? WiFi.softAPIP().toString().c_str() : "-");
 }
 
 void NetworkHandler::handleSetupLoop() {
