@@ -30,6 +30,11 @@ struct JSONConf{
     int    relayThreshold = 0;
     std::string apPsk;
     bool   advSet = false;         // an advanced password is configured
+
+    // Telemetry host (SQL) upload settings — ESP32 /api/config host_* keys.
+    bool   hostEnabled = false;
+    std::string hostUrl;           // full URL incl. IP/port/path
+    std::string hostToken;         // API token (Authorization: Bearer)
 };
 
 class DataService {

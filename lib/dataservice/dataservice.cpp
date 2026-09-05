@@ -114,6 +114,9 @@ bool DataService::applyConfigJson(const std::string &json) {
   if (const js::Value *v = o.find("relay"))           if (v->isNumber()) values.relay          = static_cast<int>(v->num);
   if (const js::Value *v = o.find("relay_threshold")) if (v->isNumber()) values.relayThreshold = static_cast<int>(v->num);
   if (const js::Value *v = o.find("adv_set"))         if (v->isBool())   values.advSet = v->b;
+  if (const js::Value *v = o.find("host_enabled"))    if (v->isBool())   values.hostEnabled = v->b;
+  values.hostUrl   = memberString(o, "host_url");
+  values.hostToken = memberString(o, "host_token");
   return true;
 }
 

@@ -68,11 +68,16 @@ bool ConfigStore::load(NodeConfig& cfg) {
 
   cfg.hostEnabled = prefs.getBool("hostEnabled", cfg.hostEnabled);
 
-  s = prefs.getString("hostUrl", cfg.hostUrl);
-  strlcpy(cfg.hostUrl, s.c_str(), sizeof(cfg.hostUrl));
-
-  s = prefs.getString("hostToken", cfg.hostToken);
-  strlcpy(cfg.hostToken, s.c_str(), sizeof(cfg.hostToken));
+  // Keys added after earlier firmware versions: guard so first boot after an
+  // upgrade doesn't log nvs_get_str NOT_FOUND errors.
+  if (prefs.isKey("hostUrl")) {
+    s = prefs.getString("hostUrl", cfg.hostUrl);
+    strlcpy(cfg.hostUrl, s.c_str(), sizeof(cfg.hostUrl));
+  }
+  if (prefs.isKey("hostToken")) {
+    s = prefs.getString("hostToken", cfg.hostToken);
+    strlcpy(cfg.hostToken, s.c_str(), sizeof(cfg.hostToken));
+  }
 
   prefs.end();
   return true;
