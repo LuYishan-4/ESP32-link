@@ -48,7 +48,7 @@ public:
   bool     staConnected() const { return _sta.isConnected(); }
   int8_t   staRssi() const { return _sta.rssi(); }
   bool     apRunning() const { return _ap.isRunning(); }
-  int      connectedChildren() const { return _ap.clientCount(); }
+  int      connectedChildren() { return _ap.clientCount(); }
   bool     relayActive() const { return _relayActive; }
   String   apSsid() const { return _apSsid; }
   String   ipAddress() const;
