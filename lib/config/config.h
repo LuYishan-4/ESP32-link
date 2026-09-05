@@ -4,9 +4,9 @@
 #pragma once
 
 #include <stdint.h>
-#include "datapacket/dp_common.h"
-#include "datapacket/dp_config.h"
-#include "datapacket/dp_provision.h"
+#include "lib/datapacket/dp_common.h"
+#include "lib/datapacket/dp_config.h"
+#include "lib/datapacket/dp_provision.h"
 
 #define ROLE_MASTER  0
 #define ROLE_SLAVE   1
