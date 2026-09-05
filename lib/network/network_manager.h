@@ -8,12 +8,12 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "config/config.h"
-#include "config/config_store.h"
-#include "ap_controller.h"
-#include "sta_controller.h"
-#include "hardware/sensor_driver.h"
-#include "datapacket/datapacket.h"
+#include "lib/config/config.h"
+#include "lib/config/config_store.h"
+#include "lib/network/ap_controller.h"
+#include "lib/network/sta_controller.h"
+#include "lib/hardware/sensor_driver.h"
+#include "lib/datapacket/datapacket.h"
 
 enum class NetState : uint8_t {
   BOOT, CONFIG_LOAD, MASTER_INIT, SLAVE_INIT, RUNNING

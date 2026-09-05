@@ -5,7 +5,7 @@
 
 #include "api_routes.h"
 #include "html_pages.h"
-#include "network/network_manager.h"
+#include "lib/network/network_manager.h"
 
 void WebServerController::begin(NetworkManager& net) {
   _net    = &net;
