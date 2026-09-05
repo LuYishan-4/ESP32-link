@@ -1,308 +1,380 @@
 // lib/webservice/html_pages.h
-// PROGMEM-stored HTML/CSS/JS control page. Vanilla JS, no external framework.
+// PROGMEM-stored single-file HTML/CSS/JS control page (adapted from the
+// "hackweb" control-panel design). Talks to the ESP32 web API:
+//   GET  /api/config    -> fill the form / show preview
+//   POST /api/config    -> persist settings (role, node id, WiFi, host upload)
+//   GET  /api/status    -> live status (STA, AP, children, ip)
+//   POST /api/reboot    -> reboot the device
 #ifndef HTML_PAGES_H
 #define HTML_PAGES_H
 
 #include <Arduino.h>
 
-static const char HTML_PAGE[] PROGMEM = R"rawliteral(
+static const char HTML_PAGE[] PROGMEM = R"htmlstr(
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESP32 Mesh Control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP NODE 設定中心</title>
 <style>
-:root{--bg:#0f172a;--card:#1e293b;--fg:#e2e8f0;--muted:#94a3b8;--acc:#38bdf8;--ok:#22c55e;--bad:#ef4444;--inp:#0b1120;--line:#334155}
-*{box-sizing:border-box}
-body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
-.wrap{max-width:920px;margin:0 auto;padding:16px}
-h1{font-size:20px;margin:0 0 4px}
-.sub{color:var(--muted);font-size:13px;margin-bottom:14px}
-.tabs{display:flex;gap:8px;margin-bottom:14px}
-.tab{flex:1;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;cursor:pointer;font-size:13px;color:var(--muted)}
-.tab.active{color:var(--acc);border-color:var(--acc)}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:720px){.grid{grid-template-columns:1fr}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
-.card h2{font-size:14px;margin:0 0 10px;color:var(--acc)}
-.row{display:flex;justify-content:space-between;align-items:center;margin:6px 0;font-size:13px}
-.row .k{color:var(--muted)}
-.pill{padding:2px 8px;border-radius:999px;font-size:11px;background:var(--inp);border:1px solid var(--line)}
-.pill.ok{color:var(--ok);border-color:var(--ok)}
-.pill.bad{color:var(--bad);border-color:var(--bad)}
-.pill.info{color:var(--acc)}
-label{display:block;font-size:12px;color:var(--muted);margin:8px 0 4px}
-input,select{width:100%;background:var(--inp);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:13px}
-button{background:var(--acc);color:#062033;border:0;border-radius:8px;padding:9px 12px;font-size:13px;cursor:pointer;font-weight:600;margin-top:10px}
-button.ghost{background:transparent;color:var(--acc);border:1px solid var(--line)}
-button.danger{background:var(--bad);color:#fff}
-button:disabled{opacity:.5;cursor:not-allowed}
-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
-th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
-th{color:var(--muted)}
-.hidden{display:none}
-#scanList{list-style:none;padding:0;margin:8px 0;font-size:13px}
-#scanList li{padding:6px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
-.note{font-size:12px;color:var(--muted);margin-top:8px}
-.full{grid-column:1/-1}
+:root {
+  color-scheme: light;
+  --ink: #171715; --muted: #6e716d; --soft: #a2a49f; --paper: #f3f4f1;
+  --white: #fff; --line: #dedfda; --dark: #1b1d1a; --red: #ff5149;
+  --red-dark: #dd372f; --red-soft: #fff0ee; --green: #19a974; --amber: #d99118;
+  --shadow: 0 18px 45px rgba(22, 23, 20, .08);
+  font-family: Inter, Arial, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; background: var(--paper); color: var(--ink); font-size: 16px; }
+button, input, select { font: inherit; } button, summary, label { -webkit-tap-highlight-color: transparent; } button { cursor: pointer; }
+.app-shell { min-height: 100vh; display: grid; grid-template-columns: 245px minmax(0, 1fr); }
+.sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 32px 22px 22px; color: #fff; background: var(--dark); z-index: 20; }
+.brand { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; padding: 0 8px 48px; }
+.brand strong, .brand small { display: block; } .brand strong { font-size: 17px; letter-spacing: .04em; } .brand small { margin-top: 4px; color: #8c918b; font-size: 10px; letter-spacing: .19em; }
+.brand-mark { width: 37px; height: 37px; display: grid; grid-template-columns: repeat(3, 1fr); align-items: end; gap: 3px; transform: skew(-10deg); }
+.brand-mark i { display: block; background: var(--red); border-radius: 2px; } .brand-mark i:nth-child(1){height:52%}.brand-mark i:nth-child(2){height:100%}.brand-mark i:nth-child(3){height:73%}
+nav { display: grid; gap: 7px; } .nav-link { display: flex; align-items: center; gap: 13px; padding: 13px 14px; border-radius: 8px; color: #a7aaa4; text-decoration: none; font-size: 14px; font-weight: 700; transition: .2s ease; }
+.nav-link span { color: #666b65; font-size: 11px; font-variant-numeric: tabular-nums; } .nav-link:hover,.nav-link.active { color: #fff; background: rgba(255,255,255,.07); } .nav-link.active { box-shadow: inset 3px 0 var(--red); } .nav-link.active span { color: var(--red); }
+.device-card { margin-top: auto; display: flex; align-items: center; gap: 11px; padding: 14px; border: 1px solid #353834; border-radius: 10px; background: #232522; }
+.device-card small,.device-card strong { display: block; } .device-card small { color: #777c76; font-size: 11px; } .device-card strong { margin-top: 3px; font-size: 13px; } .version { margin: 15px 8px 0; color: #666a65; font-size: 10px; }
+.status-light { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(25,169,116,.12); } .status-light.idle { background: #878b86; box-shadow: none; } .status-light.error { background: var(--red); box-shadow: 0 0 0 5px rgba(255,81,73,.12); }
+main { min-width: 0; }
+.topbar { position: sticky; top: 0; z-index: 15; min-height: 99px; display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 22px 34px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.9); backdrop-filter: blur(18px); }
+.topbar p,.section-heading p,.panel-heading p { margin: 0 0 5px; color: #888b86; font-size: 10px; font-weight: 850; letter-spacing: .19em; } .topbar h1 { margin: 0; font-size: 25px; letter-spacing: -.035em; }
+.top-status { display: flex; align-items: center; gap: 10px; padding: 9px 13px; border: 1px solid var(--line); border-radius: 9px; background: #fff; } .top-status small,.top-status strong { display:block; } .top-status small { color: var(--muted); font-size: 9px; } .top-status strong { margin-top: 2px; font-size: 12px; } .menu-button { display: none; border: 0; background: none; font-size: 22px; }
+.workspace { width: min(1480px, 100%); margin: 0 auto; display: grid; grid-template-columns: minmax(560px, 1fr) 390px; align-items: start; gap: 22px; padding: 28px 34px 48px; }
+.content,.status-panel,.preview-panel { border: 1px solid var(--line); background: var(--white); box-shadow: var(--shadow); } .content { padding: 27px 30px 30px; }
+.section-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-bottom: 24px; border-bottom: 1px solid var(--line); } .section-heading > div:first-child { display: flex; align-items: center; gap: 15px; }
+.section-number { display:grid; place-items:center; width: 42px; height:42px; border-radius:50%; background:var(--red-soft); color:var(--red); font-size:12px; font-weight:900; } .section-heading h2,.panel-heading h2 { margin:0; font-size:21px; letter-spacing:-.025em; }
+fieldset { padding:0; margin:0; border:0; } .mode-fieldset { margin: 25px 0 2px; } .mode-fieldset legend { margin-bottom: 10px; color:var(--muted); font-size:12px; font-weight:800; }
+.mode-selector { display:grid; grid-template-columns:1fr 1fr; gap:11px; } .mode-selector label { cursor:pointer; } .mode-selector input { position:absolute; opacity:0; }
+.mode-selector span { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:67px; padding:14px 16px; border:1px solid var(--line); border-radius:9px; transition:.18s ease; }
+.mode-selector b,.mode-selector small { display:block; } .mode-selector b { font-size:16px; } .mode-selector small { color:var(--muted); font-size:11px; font-weight:600; text-align:right; }
+.mode-selector input:checked + span { border-color:var(--red); background:var(--red-soft); box-shadow:0 0 0 2px rgba(255,81,73,.08); } .mode-selector input:focus-visible + span { outline:3px solid rgba(255,81,73,.24); outline-offset:2px; }
+.form-section { margin-top: 27px; } .form-section-title { display:flex; align-items:baseline; gap:10px; margin-bottom:14px; } .form-section-title span { font-size:15px; font-weight:850; } .form-section-title small { color:var(--soft); font-size:11px; }
+.fields { display:grid; gap:16px; } .two-columns { grid-template-columns:1fr 1fr; } .span-2 { grid-column:1 / -1; } .field { display:grid; align-content:start; gap:7px; min-width:0; }
+.field > span { font-size:13px; font-weight:750; } .field > span i { color:var(--soft); font-size:10px; font-style:normal; font-weight:600; } .field > small { color:#92958f; font-size:10px; line-height:1.4; }
+.field input,.field select { width:100%; height:43px; border:1px solid #d6d8d2; border-radius:7px; outline:0; background:#fbfcfa; color:var(--ink); padding:0 12px; font-size:14px; transition:.18s; }
+.field input:focus,.field select:focus { border-color:var(--red); box-shadow:0 0 0 3px rgba(255,81,73,.1); background:#fff; }
+.field-error { min-height:0; color:var(--red-dark); font-size:10px; font-style:normal; } .password-field { position:relative; } .password-field input { padding-right:56px; }
+.reveal-button { position:absolute; right:6px; top:6px; height:31px; padding:0 8px; border:0; border-radius:5px; background:#eceeea; color:#5f635d; font-size:10px; font-weight:800; }
+.form-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:27px; padding-top:22px; border-top:1px solid var(--line); } .button { min-height:43px; border-radius:7px; padding:0 17px; font-size:13px; font-weight:850; transition:.18s ease; }
+.button:disabled { opacity:.55; cursor:wait; } .button.primary { border:1px solid var(--red); background:var(--red); color:#fff; } .button.primary:hover { background:var(--red-dark); } .button.dark { border:1px solid var(--dark); background:var(--dark); color:#fff; }
+.button.secondary { margin-right:auto; border:1px solid var(--line); background:#fff; color:var(--ink); } .button.secondary span { margin-right:5px; color:var(--red); }
+.inspector { position:sticky; top:127px; display:grid; gap:17px; } .status-panel,.preview-panel { padding:21px; } .panel-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; } .panel-heading h2 { font-size:18px; }
+.status-badge { padding:5px 8px; border-radius:5px; font-size:10px; font-weight:850; } .status-badge.idle { color:#676b65; background:#eeefec; } .status-badge.testing { color:#98630a; background:#fff4dc; } .status-badge.success { color:#087b52; background:#e4f7ef; } .status-badge.error { color:#bc302a; background:var(--red-soft); }
+.connection-steps { list-style:none; margin:22px 0 17px; padding:0; } .connection-steps li { position:relative; display:grid; grid-template-columns:auto 1fr; gap:11px; min-height:60px; }
+.connection-steps li:not(:last-child)::after { content:""; position:absolute; left:14px; top:30px; width:1px; height:30px; background:#dfe1dc; } .step-icon { position:relative; z-index:1; width:29px; height:29px; display:grid; place-items:center; border-radius:50%; background:#eeefec; color:#878b85; font-size:10px; font-weight:900; }
+.connection-steps strong,.connection-steps small { display:block; } .connection-steps strong { padding-top:1px; font-size:13px; } .connection-steps small { margin-top:4px; color:var(--muted); font-size:10px; }
+.connection-steps li.active .step-icon { color:#fff; background:var(--amber); box-shadow:0 0 0 4px rgba(217,145,24,.12); } .connection-steps li.done .step-icon { color:#fff; background:var(--green); } .connection-steps li.error .step-icon { color:#fff; background:var(--red); }
+.latency { display:flex; align-items:baseline; justify-content:space-between; padding:13px 14px; border-radius:7px; background:#f5f6f3; } .latency span { color:var(--muted); font-size:11px; } .latency strong { font-size:18px; font-variant-numeric:tabular-nums; }
+.preview-panel pre { max-height:225px; overflow:auto; margin:18px 0 14px; padding:15px; border-radius:7px; background:#1f211e; color:#cfd5ca; font:11px/1.55 "Cascadia Mono",Consolas,monospace; scrollbar-width:thin; }
+.icon-text-button { border:0; background:none; color:var(--red-dark); font-size:11px; font-weight:850; } .preview-actions { display:grid; gap:11px; } .preview-actions button { width:100%; height:37px; border:1px solid var(--line); border-radius:6px; background:#fff; font-size:11px; font-weight:800; }
+.saved-note { display:flex; gap:11px; align-items:center; padding:15px 17px; border:1px solid #d7e9df; border-radius:8px; background:#f0faf5; } .saved-note > span { width:27px; height:27px; display:grid; place-items:center; border-radius:50%; background:var(--green); color:#fff; font-size:12px; }
+.saved-note p { margin:0; } .saved-note strong,.saved-note small { display:block; } .saved-note strong { font-size:12px; } .saved-note small { margin-top:3px; color:#6f867a; font-size:9px; }
+.toast { position:fixed; right:24px; bottom:24px; z-index:100; max-width:360px; padding:13px 16px; border-radius:8px; background:var(--dark); color:#fff; box-shadow:var(--shadow); font-size:12px; opacity:0; transform:translateY(12px); pointer-events:none; transition:.22s; }
+.toast.show { opacity:1; transform:translateY(0); } .toast.error { background:#9e2722; } [hidden] { display:none !important; }
+@media (max-width:1100px) { .workspace { grid-template-columns:1fr; } .inspector { position:static; grid-template-columns:1fr 1fr; } .saved-note { grid-column:1/-1; } }
+@media (max-width:760px) { .app-shell { display:block; } .sidebar { position:fixed; left:0; transform:translateX(-100%); width:245px; transition:.22s; } .sidebar.open { transform:translateX(0); } .menu-button { display:block; } .topbar { padding:17px 19px; min-height:82px; justify-content:flex-start; } .topbar h1 { font-size:20px; } .top-status { margin-left:auto; } .workspace { padding:18px 14px 35px; } .content { padding:21px 17px; } .section-heading { align-items:flex-start; } .section-number { display:none; } .two-columns,.inspector { grid-template-columns:1fr; } .span-2 { grid-column:auto; } .form-actions { flex-wrap:wrap; } .button.secondary { width:100%; margin:0; } .button.primary,.button.dark { flex:1; } .saved-note { grid-column:auto; } }
+@media (max-width:480px) { .mode-selector { grid-template-columns:1fr; } .section-heading { display:grid; } .top-status { display:none; } .form-section-title { display:grid; gap:3px; } .form-actions .button { width:100%; flex:auto; } }
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto !important; transition-duration:.01ms !important; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-<h1>ESP32 Master/Slave Mesh</h1>
-<div class="sub" id="subline">connecting...</div>
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="#settings" aria-label="ESP NODE 設定中心首頁">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><strong>ESP NODE</strong><small>CONTROL PANEL</small></span>
+    </a>
+    <nav aria-label="設定導覽">
+      <a class="nav-link active" href="#settings"><span>01</span>連線設定</a>
+      <a class="nav-link" href="#vps-status"><span>02</span>連線狀態</a>
+      <a class="nav-link" href="#config-preview"><span>03</span>設定預覽</a>
+    </nav>
+    <div class="device-card">
+      <span class="status-light idle" id="sidebarLight"></span>
+      <div><small>本機節點</small><strong id="sidebarStatus">讀取中…</strong></div>
+    </div>
+    <p class="version">ESP NODE Firmware</p>
+  </aside>
 
-<div class="tabs">
-  <div class="tab active" data-p="status">Status</div>
-  <div class="tab" data-p="config">Settings</div>
-  <div class="tab" data-p="scan">Scan</div>
-  <div class="tab" data-p="data">Telemetry</div>
+  <main>
+    <header class="topbar">
+      <button class="menu-button" id="menuButton" type="button" aria-label="開啟選單">☰</button>
+      <div><p>DEVICE CONFIGURATION</p><h1>ESP NODE 設定中心</h1></div>
+      <div class="top-status"><span class="status-light" id="topLight"></span>
+        <div><small>本機 IP</small><strong id="topIp">--</strong></div></div>
+    </header>
+
+    <div class="workspace">
+      <section class="content" id="settings">
+        <div class="section-heading">
+          <div><span class="section-number">01</span><div><p>CONNECTION SETUP</p><h2>裝置與 Host 連線設定</h2></div></div>
+        </div>
+
+        <form id="settingsForm" novalidate>
+          <fieldset class="mode-fieldset">
+            <legend>節點模式</legend>
+            <div class="mode-selector">
+              <label><input type="radio" name="nodeMode" value="master" checked /><span><b>主機</b><small>建立網路並上傳資料到 Host</small></span></label>
+              <label><input type="radio" name="nodeMode" value="slave" /><span><b>從機</b><small>配對主機並轉送感測資料</small></span></label>
+            </div>
+          </fieldset>
+
+          <div class="form-section">
+            <div class="form-section-title"><span>裝置</span><small>辨識這台 ESP NODE</small></div>
+            <div class="fields two-columns">
+              <label class="field"><span>裝置 ID (Node ID)</span>
+                <input id="deviceId" name="deviceId" type="text" maxlength="8" required pattern="[A-Za-z0-9_-]+" />
+                <small>限 8 字元內英數與 - _</small></label>
+              <label class="field slave-only" hidden><span>主機 Node ID</span>
+                <input id="targetId" name="targetId" type="text" maxlength="8" placeholder="主機的 Node ID" /></label>
+              <label class="field"><span>群組密碼 (連 NODE 網路)</span>
+                <div class="password-field"><input id="apPsk" name="apPsk" type="password" maxlength="64" /><button class="reveal-button" type="button" data-target="apPsk">顯示</button></div>
+                <small>主機與從機共用，也是 Wi-Fi 密碼</small></label>
+            </div>
+          </div>
+
+          <div class="form-section host-only">
+            <div class="form-section-title"><span>Wi-Fi 上行</span><small>主機要連上的外部網路（選填）</small></div>
+            <div class="fields two-columns">
+              <label class="field"><span>Wi-Fi SSID</span><input id="wifiSsid" name="wifiSsid" type="text" placeholder="外部網路 SSID" /></label>
+              <label class="field"><span>Wi-Fi 密碼</span>
+                <div class="password-field"><input id="wifiPassword" name="wifiPassword" type="password" placeholder="密碼" /><button class="reveal-button" type="button" data-target="wifiPassword">顯示</button></div></label>
+              <label class="field"><span>位址配置</span><select id="ipMode" name="ipMode"><option value="dhcp">DHCP</option><option value="static">固定 IP</option></select></label>
+              <label class="field static-ip-field" hidden><span>固定 IP / 閘道 / 遮罩</span>
+                <div style="display:grid;gap:8px">
+                  <input id="sIp" type="text" placeholder="IP，例 192.168.1.80" />
+                  <input id="sGw" type="text" placeholder="Gateway，例 192.168.1.1" />
+                  <input id="sMask" type="text" placeholder="Subnet，例 255.255.255.0" />
+                </div></label>
+            </div>
+          </div>
+
+          <div class="form-section host-only">
+            <div class="form-section-title"><span>資料收集 Host</span><small>接收並寫入 SQL 的伺服器</small></div>
+            <div class="fields">
+              <label class="field" style="display:flex;align-items:center;gap:8px;flex-direction:row">
+                <input type="checkbox" id="hostEnabled" style="width:auto"> 啟用上傳到 Host</label>
+              <label class="field"><span>Host URL（含 IP）</span>
+                <input id="hostUrl" type="text" placeholder="http://192.168.1.50:3000/api/ingest" /></label>
+              <label class="field"><span>API Token <i>選填</i></span>
+                <div class="password-field"><input id="hostToken" type="password" autocomplete="off" /><button class="reveal-button" type="button" data-target="hostToken">顯示</button></div>
+                <small>非空時以 Authorization: Bearer 送出</small></label>
+            </div>
+          </div>
+
+          <div class="form-section host-only">
+            <div class="form-section-title"><span>中繼 / 節點</span><small>（從機模式下才有意義）</small></div>
+            <div class="fields two-columns">
+              <label class="field"><span>Relay</span><select id="relay">
+                <option value="0">關閉</option><option value="1">開啟（手動）</option><option value="2">自動</option></select></label>
+              <label class="field"><span>自動提升門檻</span><input id="relayThr" type="number" min="1" max="8" /></label>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="button secondary" id="testButton" type="button"><span>◌</span>讀取 / 測試</button>
+            <button class="button primary" type="submit">儲存設定</button>
+            <button class="button dark" id="rebootBtn" type="button">套用並重新啟動</button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="inspector">
+        <section class="status-panel" id="vps-status">
+          <div class="panel-heading"><div><p>LIVE STATUS</p><h2>連線狀態</h2></div><span class="status-badge idle" id="overallBadge">讀取中</span></div>
+          <ol class="connection-steps">
+            <li data-step="config"><span class="step-icon">1</span><div><strong>設定檢查</strong><small id="stConfig">等待讀取</small></div></li>
+            <li data-step="wifi"><span class="step-icon">2</span><div><strong>Wi-Fi</strong><small id="stWifi">尚未連線</small></div></li>
+            <li data-step="host"><span class="step-icon">3</span><div><strong>Host 上傳</strong><small id="stHost">未啟用</small></div></li>
+            <li data-step="ready"><span class="step-icon">4</span><div><strong>資料通道</strong><small id="stChannel">等待節點</small></div></li>
+          </ol>
+          <div class="latency"><span>最近延遲</span><strong id="latencyValue">-- ms</strong></div>
+        </section>
+
+        <section class="preview-panel" id="config-preview">
+          <div class="panel-heading"><div><p>CONFIG PREVIEW</p><h2>設定預覽</h2></div><button id="copyButton" class="icon-text-button" type="button">複製</button></div>
+          <pre><code id="configJson">（尚未讀取）</code></pre>
+          <div class="saved-note"><span>✓</span><p><strong id="saveState">尚未寫入裝置</strong><small id="saveTime">從 /api/config 讀取</small></p></div>
+        </section>
+      </aside>
+    </div>
+  </main>
 </div>
-
-<div class="grid">
-  <div class="card" id="p-status">
-    <h2>Live status</h2>
-    <div id="statusRows"></div>
-  </div>
-
-  <div class="card hidden" id="p-config">
-    <h2>Settings</h2>
-    <label>Role</label>
-    <select id="role">
-      <option value="master">Master</option>
-      <option value="slave">Slave</option>
-    </select>
-    <label>Node ID (8 chars)</label>
-    <input id="nodeId" maxlength="8">
-    <div id="masterFields">
-      <label>Upstream SSID</label>
-      <input id="upSsid" maxlength="32">
-      <label>Upstream Password</label>
-      <input id="upPsk" maxlength="64">
-      <label>IP Mode</label>
-      <select id="ipMode">
-        <option value="dhcp">DHCP</option>
-        <option value="static">Static</option>
-      </select>
-      <div id="staticFields" class="hidden">
-        <label>IP</label><input id="sIp" placeholder="192.168.1.50">
-        <label>Gateway</label><input id="sGw" placeholder="192.168.1.1">
-        <label>Subnet</label><input id="sMask" placeholder="255.255.255.0">
-      </div>
-
-      <div id="hostFields">
-        <h3>Host upload (SQL)</h3>
-        <label style="display:flex;align-items:center;gap:8px">
-          <input type="checkbox" id="hostEnabled" style="width:auto"> Upload telemetry to host
-        </label>
-        <label>Host API URL</label>
-        <input id="hostUrl" placeholder="http://192.168.1.50:3000/api/ingest" maxlength="160">
-        <label>Host API token</label>
-        <input id="hostToken" type="password" autocomplete="off" maxlength="128">
-        <div class="note">Master POSTs each telemetry packet here as JSON; sent with
-          <code>Authorization: Bearer &lt;token&gt;</code> when the token is set.</div>
-      </div>
-    </div>
-    <div id="slaveFields" class="hidden">
-      <label>Target Node ID</label>
-      <input id="targetId" maxlength="8">
-    </div>
-    <label>Relay (slave)</label>
-    <select id="relay">
-      <option value="0">Off</option>
-      <option value="1">On (manual)</option>
-      <option value="2">Auto</option>
-    </select>
-    <label>Relay threshold (auto)</label>
-    <input id="relayThr" type="number" min="1" max="8">
-    <button id="saveBtn">Save &amp; Apply</button>
-    <div class="note">Wi-Fi role changes take effect after reboot.</div>
-    <button id="rebootBtn" class="danger">Reboot device</button>
-  </div>
-
-  <div class="card hidden" id="p-scan">
-    <h2>Scan for target</h2>
-    <button id="scanBtn" class="ghost">Scan</button>
-    <ul id="scanList"></ul>
-  </div>
-
-  <div class="card hidden" id="p-data">
-    <h2>Soil telemetry</h2>
-    <table>
-      <thead><tr><th>Node</th><th>Path</th><th>pH</th><th>Light</th><th>Moist</th></tr></thead>
-      <tbody id="dataRows"></tbody>
-    </table>
-  </div>
-
-  <div class="card full">
-    <h2>Advanced (password-gated)</h2>
-    <div id="advLocked">
-      <label>Advanced password</label>
-      <input id="advPw" type="password">
-      <button id="unlockBtn">Unlock</button>
-    </div>
-    <div id="advOpen" class="hidden">
-      <label>New hotspot password</label>
-      <input id="apPsk" maxlength="64">
-      <button id="hotspotBtn">Set hotspot password</button>
-      <button id="provBtn">Batch provision to all nodes</button>
-      <label style="display:flex;align-items:center;gap:8px">
-        <input type="checkbox" id="applyAll" checked style="width:auto"> Propagate to whole tree
-      </label>
-      <button id="advSetBtn" class="ghost">Set new advanced password</button>
-    </div>
-  </div>
-</div>
-</div>
-
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script>
-const $=id=>document.getElementById(id);
-let advUnlocked=false;
-let ws=null;
+"use strict";
+const $ = (id) => document.getElementById(id);
+const $q = (sel) => document.querySelector(sel);
+const $qa = (sel) => Array.prototype.slice.call(document.querySelectorAll(sel));
+let lastStatus = null;
+let lastConfig = null;
 
-async function jget(u){const r=await fetch(u);return r.json();}
-async function jpost(u,o){const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o||{})});return r.json();}
+async function jget(u){ const r = await fetch(u); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }
+async function jpost(u, o){ const r = await fetch(u, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(o||{}) }); return r.json(); }
 
-function renderStatus(s){
-  $('subline').textContent='role: '+s.role+' | '+(s.sta_connected?'uplink: '+s.sta_rssi+' dBm':'no uplink')+' | AP '+(s.ap_running?'on':'off')+' | '+s.ip;
-  const add=(k,v,pill)=>$('statusRows').insertAdjacentHTML('beforeend',
-    '<div class="row"><span class="k">'+k+'</span><span class="pill '+(pill||'info')+'">'+v+'</span></div>');
-  $('statusRows').innerHTML='';
-  add('Role',s.role);
-  add('State',s.state);
-  add('Node ID',s.node_id);
-  add('STA connected',s.sta_connected?'yes':'no',s.sta_connected?'ok':'bad');
-  add('RSSI',(s.sta_rssi||'-')+' dBm');
-  add('AP running',s.ap_running?'yes':'no',s.ap_running?'ok':'bad');
-  add('AP SSID',s.ap_ssid||'-');
-  add('Children',s.children);
-  add('Relay',s.relay_active?'active':'off',s.relay_active?'ok':'info');
-  add('IP',s.ip);
-  add('Free heap',s.free_heap+' B');
-  add('Uptime',s.uptime+' s');
+function toast(msg, type){ const t=$("toast"); t.textContent=msg; t.className="toast show"+(type==="error"?" error":""); clearTimeout(toast._t); toast._t=setTimeout(function(){ t.className="toast"; }, 3200); }
+function mode(){ const el=$q('input[name=nodeMode]:checked'); return el ? el.value : "master"; }
+function stepState(li, cls){ li.className = cls; }
+function setStep(name, cls, text){ const li=$q('[data-step="'+name+'"]'); if(li) stepState(li, cls); const id = { config:"stConfig", wifi:"stWifi", host:"stHost", ready:"stChannel" }[name]; if(id && text!=null) $(id).textContent = text; }
+
+function refreshModeUI(){
+  const host = mode() === "master";
+  $qa(".host-only").forEach(function(el){ el.hidden = !host; });
+  $qa(".slave-only").forEach(function(el){ el.hidden = host; });
+  $q(".static-ip-field").hidden = $("ipMode").value !== "static";
 }
-
-async function refreshStatus(){try{renderStatus(await jget('/api/status'));}catch(e){}}
-
-async function loadConfig(){
-  const c=await jget('/api/config');
-  $('role').value=c.role;
-  $('nodeId').value=c.node_id;
-  $('targetId').value=c.target_id;
-  $('upSsid').value=c.upstream_ssid;
-  $('upPsk').value=c.upstream_psk;
-  $('ipMode').value=c.ip_mode;
-  $('sIp').value=c.ip; $('sGw').value=c.gateway; $('sMask').value=c.subnet;
-  $('relay').value=String(c.relay);
-  $('relayThr').value=c.relay_threshold;
-  $('apPsk').value=c.ap_psk;
-  $('hostEnabled').checked=!!c.host_enabled;
-  $('hostUrl').value=c.host_url||'';
-  $('hostToken').value=c.host_token||'';
-  onRole(); onIp();
+function fillForm(c){
+  const m = c.role === "slave" ? "slave" : "master";
+  const radio = $q('input[name=nodeMode][value="'+m+'"]'); if(radio) radio.checked = true;
+  $("deviceId").value = c.node_id || "";
+  $("targetId").value = c.target_id || "";
+  $("apPsk").value = c.ap_psk || "";
+  $("wifiSsid").value = c.upstream_ssid || "";
+  $("wifiPassword").value = c.upstream_psk || "";
+  $("ipMode").value = c.ip_mode === "static" ? "static" : "dhcp";
+  $("sIp").value = c.ip || "";
+  $("sGw").value = c.gateway || "";
+  $("sMask").value = c.subnet || "";
+  $("relay").value = String(c.relay || 0);
+  $("relayThr").value = c.relay_threshold != null ? c.relay_threshold : "";
+  $("hostEnabled").checked = !!c.host_enabled;
+  $("hostUrl").value = c.host_url || "";
+  $("hostToken").value = c.host_token || "";
+  refreshModeUI();
 }
-
-function onRole(){
-  const r=$('role').value;
-  $('masterFields').classList.toggle('hidden',r!=='master');
-  $('slaveFields').classList.toggle('hidden',r!=='slave');
-}
-function onIp(){$('staticFields').classList.toggle('hidden',$('ipMode').value!=='static');}
-
-async function saveConfig(){
-  const body={
-    role:$('role').value,
-    node_id:$('nodeId').value,
-    target_id:$('targetId').value,
-    upstream_ssid:$('upSsid').value,
-    upstream_psk:$('upPsk').value,
-    ip_mode:$('ipMode').value,
-    ip:$('sIp').value,
-    gateway:$('sGw').value,
-    subnet:$('sMask').value,
-    relay:parseInt($('relay').value),
-    relay_threshold:parseInt($('relayThr').value),
-    host_enabled:$('hostEnabled').checked,
-    host_url:$('hostUrl').value.trim(),
-    host_token:$('hostToken').value.trim()
+function collect(){
+  return {
+    role: mode(),
+    node_id: $("deviceId").value.trim(),
+    target_id: $("targetId").value.trim(),
+    upstream_ssid: $("wifiSsid").value.trim(),
+    upstream_psk: $("wifiPassword").value,
+    ip_mode: $("ipMode").value,
+    ip: $("sIp").value.trim(),
+    gateway: $("sGw").value.trim(),
+    subnet: $("sMask").value.trim(),
+    relay: parseInt($("relay").value || "0", 10),
+    relay_threshold: parseInt($("relayThr").value || "3", 10),
+    ap_psk: $("apPsk").value.trim(),
+    host_enabled: $("hostEnabled").checked,
+    host_url: $("hostUrl").value.trim(),
+    host_token: $("hostToken").value
   };
-  const r=await jpost('/api/config',body);
-  alert(r.ok?'Saved. Reboot to apply Wi-Fi changes.':'Save failed');
+}
+function showPreview(c){ $("configJson").textContent = JSON.stringify(c, null, 2); }
+
+function updateSteps(st, cfg){
+  const c = cfg || lastConfig || {};
+  if(st) {
+    setStep("config", "done", "Node " + (st.node_id || "-") + " · " + (st.role === "slave" ? "從機" : "主機"));
+    setStep("wifi", st.sta_connected ? "done" : (st.ap_running ? "active" : ""),
+            st.sta_connected ? "STA 已連線 " + (st.sta_rssi || "?") + " dBm" : (st.ap_running ? "僅 AP 模式" : "未連線"));
+  }
+  if (c) {
+    setStep("host", (c.host_enabled && c.host_url) ? "done" : (c.host_enabled ? "error" : ""),
+            (c.host_enabled && c.host_url) ? "已啟用 → " + c.host_url : (c.host_enabled ? "缺少 URL" : "未啟用"));
+  }
+  if (st) {
+    setStep("ready", (st.children > 0) ? "done" : "",
+            (st.children > 0) ? "已連子節點 " + st.children + " 台" : "等待節點 / 資料");
+  }
 }
 
-async function doScan(){
-  const ul=$('scanList'); ul.innerHTML='<li>scanning...</li>';
-  const s=await jget('/api/scan');
-  ul.innerHTML='';
-  if(!s.items||!s.items.length){ul.innerHTML='<li>No matching NODE_* AP found</li>';return;}
-  s.items.forEach(it=>{
-    const li=document.createElement('li');
-    li.innerHTML='<span>'+it.ssid+'</span><span>'+it.rssi+' dBm</span>';
-    ul.appendChild(li);
-  });
+async function refreshStatus(){
+  try {
+    const st = await jget("/api/status");
+    lastStatus = st;
+    const ok = st.ap_running || st.sta_connected;
+    $("sidebarStatus").textContent = (st.role === "slave" ? "從機" : "主機") + " " + (st.node_id || "");
+    $("sidebarLight").className = "status-light" + (ok ? "" : " idle");
+    $("topLight").className = "status-light" + (ok ? "" : " idle");
+    $("topIp").textContent = st.ip || "--";
+    $("overallBadge").className = "status-badge " + (ok ? "success" : "idle");
+    $("overallBadge").textContent = ok ? "正常" : "等待連線";
+    updateSteps(st);
+  } catch (e) {
+    $("sidebarStatus").textContent = "無法連線";
+    $("sidebarLight").className = "status-light error";
+    $("topIp").textContent = "--";
+    $("overallBadge").className = "status-badge error";
+    $("overallBadge").textContent = "離線";
+  }
 }
 
-async function unlock(){
-  const r=await jpost('/api/advanced',{password:$('advPw').value});
-  if(r.ok){advUnlocked=true;$('advLocked').classList.add('hidden');$('advOpen').classList.remove('hidden');}
-  else alert('Wrong advanced password');
-}
-async function setHotspot(){
-  const r=await jpost('/api/hotspot',{password:$('advPw').value,psk:$('apPsk').value});
-  alert(r.ok?'Hotspot password updated':'Failed (min 8 chars / wrong password)');
-}
-async function doProvision(){
-  const r=await jpost('/api/provision',{password:$('advPw').value,psk:$('apPsk').value,apply_to_all:$('applyAll').checked});
-  alert(r.ok?'Provisioning sent':'Failed');
-}
-async function setAdvPw(){
-  const np=prompt('New advanced password (min 1 char):');
-  if(!np)return;
-  const r=await jpost('/api/advanced',{password:$('advPw').value,new_password:np});
-  alert(r.ok?'Advanced password updated':'Failed');
-}
-async function doReboot(){await jpost('/api/reboot',{});}
-
-function startWs(){
-  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');
-  ws.onmessage=e=>{
-    const d=JSON.parse(e.data);
-    if(d.type==='status'){renderStatus(d);return;}
-    const tr=document.createElement('tr');
-    tr.innerHTML='<td>'+d.node_id+'</td><td>'+d.path+'</td><td>'+
-      Number(d.ph).toFixed(2)+'</td><td>'+Number(d.light).toFixed(0)+
-      '</td><td>'+Number(d.moisture).toFixed(1)+'%</td>';
-    const tb=$('dataRows');
-    tb.insertBefore(tr,tb.firstChild);
-    while(tb.children.length>30)tb.removeChild(tb.lastChild);
-  };
-  ws.onclose=()=>setTimeout(startWs,2000);
+async function doTest(){
+  const btn = $("testButton"); btn.disabled = true;
+  $("overallBadge").className = "status-badge testing"; $("overallBadge").textContent = "測試中";
+  const t0 = performance.now();
+  try {
+    const st = await jget("/api/status");
+    const c  = await jget("/api/config");
+    lastStatus = st; lastConfig = c;
+    fillForm(c); showPreview(c);
+    const ms = Math.max(1, Math.round(performance.now() - t0));
+    $("latencyValue").textContent = ms + " ms";
+    updateSteps(st, c);
+    $("overallBadge").className = "status-badge success"; $("overallBadge").textContent = "正常";
+    $("saveState").textContent = "已與裝置同步";
+    toast("已從裝置讀取設定與狀態");
+  } catch (e) {
+    $("overallBadge").className = "status-badge error"; $("overallBadge").textContent = "無法連線";
+    toast("無法連線裝置：" + e.message, "error");
+  } finally { btn.disabled = false; }
 }
 
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-  t.classList.add('active');
-  ['status','config','scan','data'].forEach(p=>{
-    $('p-'+p).classList.toggle('hidden',p!==t.dataset.p);
-  });
+async function saveConfig(reboot){
+  const btn = $qa("#rebootBtn")[0]; if(reboot && btn) btn.disabled = true;
+  const body = collect();
+  try {
+    const r = await jpost("/api/config", body);
+    if (!r.ok) { toast("儲存失敗" + (r.err ? "：" + r.err : ""), "error"); return; }
+    const c = await jget("/api/config");
+    lastConfig = c; showPreview(c); updateSteps(lastStatus, c);
+    $("saveState").textContent = "已寫入裝置";
+    $("saveTime").textContent = new Date().toLocaleTimeString() + "（NVS）";
+    toast(reboot ? "已儲存，正在重新啟動…" : "設定已寫入（Wi-Fi/角色變更需重啟）");
+    if (reboot) { await jpost("/api/reboot", {}); }
+  } catch (e) {
+    toast("寫入失敗：" + e.message, "error");
+  } finally { if(reboot && btn) btn.disabled = false; }
+}
+
+$q("#settingsForm").addEventListener("submit", function(e){ e.preventDefault(); saveConfig(false); });
+$("#testButton").addEventListener("click", doTest);
+$("#rebootBtn").addEventListener("click", function(){ saveConfig(true); });
+$("#copyButton").addEventListener("click", function(){
+  const t = $("configJson").textContent;
+  if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(function(){ toast("設定 JSON 已複製"); }); }
+  else { toast("瀏覽器未允許剪貼簿", "error"); }
 });
+$qa(".reveal-button").forEach(function(b){ b.addEventListener("click", function(){
+  const inp = $(b.dataset.target); if(!inp) return;
+  const show = inp.type === "password";
+  inp.type = show ? "text" : "password";
+  b.textContent = show ? "隱藏" : "顯示";
+}); });
+$qa('input[name=nodeMode]').forEach(function(r){ r.addEventListener("change", refreshModeUI); });
+$("ipMode").addEventListener("change", refreshModeUI);
+$("#menuButton").addEventListener("click", function(){ $q(".sidebar").classList.toggle("open"); });
+$qa(".nav-link").forEach(function(l){ l.addEventListener("click", function(){
+  $qa(".nav-link").forEach(function(x){ x.classList.remove("active"); }); l.classList.add("active");
+  $q(".sidebar").classList.remove("open");
+}); });
 
-$('role').onchange=onRole;
-$('ipMode').onchange=onIp;
-$('saveBtn').onclick=saveConfig;
-$('scanBtn').onclick=doScan;
-$('unlockBtn').onclick=unlock;
-$('hotspotBtn').onclick=setHotspot;
-$('provBtn').onclick=doProvision;
-$('advSetBtn').onclick=setAdvPw;
-$('rebootBtn').onclick=doReboot;
-
-loadConfig(); refreshStatus(); startWs();
-setInterval(refreshStatus,5000);
+(function init(){
+  refreshModeUI();
+  doTest();
+  setInterval(refreshStatus, 5000);
+})();
 </script>
 </body>
 </html>
-)rawliteral";
+)htmlstr";
 
 #endif // HTML_PAGES_H
