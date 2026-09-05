@@ -29,7 +29,7 @@ struct TelemetryEntry {
   uint8_t  sensorType = 0;
 };
 
-class NetworkManager {
+class NetworkHandler {
 public:
   using DataCallback = std::function<void(const uint8_t* packet, size_t len)>;
 

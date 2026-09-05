@@ -33,7 +33,7 @@ public:
   bool forceReconnect();
 
   bool   connectDataSocket(uint16_t port = DP_DATA_PORT);
-  bool   dataConnected() const { return _dataClient && _dataClient.connected(); }
+  bool   dataConnected() { return _dataClient && _dataClient.connected(); }
   size_t sendFrame(const uint8_t* data, size_t len);  // frames + writes upstream
 
 private:

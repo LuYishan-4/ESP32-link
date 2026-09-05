@@ -7,8 +7,8 @@
 
 class AsyncWebServer;
 class AsyncWebSocket;
-class NetworkManager;
+class NetworkHandler;
 
-void registerApiRoutes(AsyncWebServer& server, AsyncWebSocket& ws, NetworkManager& net);
-String apiStatusJson(NetworkManager& net);
+void registerApiRoutes(AsyncWebServer& server, AsyncWebSocket& ws, NetworkHandler& net);
+String apiStatusJson(NetworkHandler& net);
 String telemetryToJson(const uint8_t* packet, size_t len);

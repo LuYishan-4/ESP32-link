@@ -7,7 +7,7 @@
 #include "html_pages.h"
 #include "lib/network/network_manager.h"
 
-void WebServerController::begin(NetworkManager& net) {
+void WebServerController::begin(NetworkHandler& net) {
   _net    = &net;
   _server = new AsyncWebServer(80);
   _ws     = new AsyncWebSocket("/ws");

@@ -8,7 +8,7 @@
 #include "lib/webservice/web_server.h"
 #include "lib/hardware/gpio_manager.h"
 
-NetworkManager      g_net;
+NetworkHandler      g_net;
 WebServerController g_web;
 
 void setup() {

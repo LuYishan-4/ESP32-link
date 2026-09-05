@@ -21,7 +21,7 @@ static void parseIp(const char* s, uint8_t out[4]) {
   }
 }
 
-static bool advancedOk(NetworkManager& net, JsonObject& o) {
+static bool advancedOk(NetworkHandler& net, JsonObject& o) {
   const char* pw = o["password"] | "";
   return net.verifyAdvancedPassword(pw);
 }
@@ -30,7 +30,7 @@ static bool advancedOk(NetworkManager& net, JsonObject& o) {
 // JSON builders
 // ---------------------------------------------------------------------------
 
-String apiStatusJson(NetworkManager& net) {
+String apiStatusJson(NetworkHandler& net) {
   DynamicJsonDocument doc(512);
   doc["type"]          = "status";
   doc["role"]          = net.roleName();
@@ -86,7 +86,7 @@ String telemetryToJson(const uint8_t* p, size_t len) {
   return out;
 }
 
-static String configToJson(NetworkManager& net) {
+static String configToJson(NetworkHandler& net) {
   NodeConfig& c = net.config();
   DynamicJsonDocument doc(1024);
 
@@ -109,7 +109,7 @@ static String configToJson(NetworkManager& net) {
   return out;
 }
 
-static String scanToJson(NetworkManager& net) {
+static String scanToJson(NetworkHandler& net) {
   ScanEntry entries[16];
   int n = net.scanTargets(entries, 16);
 
@@ -135,7 +135,7 @@ static String scanToJson(NetworkManager& net) {
 // Route registration
 // ---------------------------------------------------------------------------
 
-void registerApiRoutes(AsyncWebServer& server, AsyncWebSocket& ws, NetworkManager& net) {
+void registerApiRoutes(AsyncWebServer& server, AsyncWebSocket& ws, NetworkHandler& net) {
   (void)ws;
 
   server.on("/api/status", HTTP_GET, [&net](AsyncWebServerRequest* req) {

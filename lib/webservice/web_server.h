@@ -6,14 +6,14 @@
 
 class AsyncWebServer;
 class AsyncWebSocket;
-class NetworkManager;
+class NetworkHandler;
 
 class WebServerController {
 public:
-  void begin(NetworkManager& net);
+  void begin(NetworkHandler& net);
 
 private:
   AsyncWebServer* _server = nullptr;
   AsyncWebSocket* _ws     = nullptr;
-  NetworkManager* _net    = nullptr;
+  NetworkHandler* _net    = nullptr;
 };

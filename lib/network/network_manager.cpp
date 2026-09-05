@@ -10,7 +10,7 @@
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-void NetworkManager::begin() {
+void NetworkHandler::begin() {
   _bootMs = millis();
   _sensor.begin();
   loadConfig();
@@ -19,12 +19,12 @@ void NetworkManager::begin() {
   else                          startSlave();
 }
 
-void NetworkManager::loop() {
+void NetworkHandler::loop() {
   if (_cfg.role == ROLE_MASTER) handleMasterLoop();
   else                          handleSlaveLoop();
 }
 
-void NetworkManager::loadConfig() {
+void NetworkHandler::loadConfig() {
   _state = NetState::CONFIG_LOAD;
   if (!ConfigStore::load(_cfg)) {
     Serial.println("[cfg] no stored config, using defaults");
@@ -33,22 +33,22 @@ void NetworkManager::loadConfig() {
   Serial.printf("[cfg] role=%s id=%s target=%s\n", roleName(), _cfg.nodeId, _cfg.targetId);
 }
 
-bool NetworkManager::saveConfig() {
+bool NetworkHandler::saveConfig() {
   return ConfigStore::save(_cfg);
 }
 
-void NetworkManager::applyConfig() {
+void NetworkHandler::applyConfig() {
   loadConfig();
   if (_cfg.role == ROLE_MASTER) startMaster();
   else                          startSlave();
 }
 
-void NetworkManager::requestRoleSwitch(uint8_t role) {
+void NetworkHandler::requestRoleSwitch(uint8_t role) {
   _cfg.role = role;
   ConfigStore::save(_cfg);
 }
 
-void NetworkManager::startMaster() {
+void NetworkHandler::startMaster() {
   _state = NetState::MASTER_INIT;
   WiFi.mode(WIFI_AP_STA);
 
@@ -76,7 +76,7 @@ void NetworkManager::startMaster() {
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 }
 
-void NetworkManager::startSlave() {
+void NetworkHandler::startSlave() {
   _state = NetState::SLAVE_INIT;
   WiFi.mode(WIFI_STA);
   _sta.begin(_cfg.targetId, _cfg.apPsk);
@@ -85,7 +85,7 @@ void NetworkManager::startSlave() {
   _sta.forceReconnect();
 }
 
-void NetworkManager::updateRelay() {
+void NetworkHandler::updateRelay() {
   if (_cfg.role != ROLE_SLAVE) return;
 
   bool want = _cfg.relayEnabled || (_cfg.relayAuto && _sta.isConnected());
@@ -109,7 +109,7 @@ void NetworkManager::updateRelay() {
 // Loop handlers
 // ---------------------------------------------------------------------------
 
-void NetworkManager::handleMasterLoop() {
+void NetworkHandler::handleMasterLoop() {
   uint8_t buf[DP_MAX_PACKET_SIZE];
   int len = _ap.readFrame(buf, sizeof(buf));
   while (len > 0) {
@@ -118,7 +118,7 @@ void NetworkManager::handleMasterLoop() {
   }
 }
 
-void NetworkManager::handleSlaveLoop() {
+void NetworkHandler::handleSlaveLoop() {
   _sta.loop();
   updateRelay();
 
@@ -163,7 +163,7 @@ void NetworkManager::handleSlaveLoop() {
 // Packet build / verify
 // ---------------------------------------------------------------------------
 
-size_t NetworkManager::buildPacket(uint8_t type, const char* nodeId,
+size_t NetworkHandler::buildPacket(uint8_t type, const char* nodeId,
                                    const uint8_t* payload, size_t payloadLen,
                                    uint8_t* out, size_t outCap) {
   if (payloadLen > DP_MAX_PAYLOAD) payloadLen = DP_MAX_PAYLOAD;
@@ -182,7 +182,7 @@ size_t NetworkManager::buildPacket(uint8_t type, const char* nodeId,
   return total;
 }
 
-bool NetworkManager::verifyPacket(const uint8_t* packet, size_t len) const {
+bool NetworkHandler::verifyPacket(const uint8_t* packet, size_t len) const {
   if (!packet || len < DP_HEADER_SIZE + 4) return false;
   if (packet[DP_OFFSET_MAGIC]   != DP_MAGIC)   return false;
   if (packet[DP_OFFSET_VERSION] != DP_VERSION) return false;
@@ -193,7 +193,7 @@ bool NetworkManager::verifyPacket(const uint8_t* packet, size_t len) const {
   return expected == actual;
 }
 
-void NetworkManager::processPacket(const uint8_t* packet, size_t len) {
+void NetworkHandler::processPacket(const uint8_t* packet, size_t len) {
   if (!verifyPacket(packet, len)) return;
 
   uint8_t type = packet[DP_OFFSET_TYPE];
@@ -212,7 +212,7 @@ void NetworkManager::processPacket(const uint8_t* packet, size_t len) {
 // Packet handlers
 // ---------------------------------------------------------------------------
 
-void NetworkManager::handleHello(const uint8_t* p, size_t len) {
+void NetworkHandler::handleHello(const uint8_t* p, size_t len) {
   (void)len;
   char nodeId[DP_NODEID_LEN + 1];
   memcpy(nodeId, p + DP_OFFSET_NODEID, DP_NODEID_LEN);
@@ -224,14 +224,14 @@ void NetworkManager::handleHello(const uint8_t* p, size_t len) {
   _ap.broadcastFrame(ack, n);
 }
 
-void NetworkManager::handleHeartbeat(const uint8_t* p, size_t len) {
+void NetworkHandler::handleHeartbeat(const uint8_t* p, size_t len) {
   (void)p; (void)len;
   uint8_t ack[DP_MAX_PACKET_SIZE];
   size_t n = buildPacket(DP_TYPE_ACK, _cfg.nodeId, nullptr, 0, ack, sizeof(ack));
   _ap.broadcastFrame(ack, n);
 }
 
-void NetworkManager::handleSensorData(const uint8_t* p, size_t len) {
+void NetworkHandler::handleSensorData(const uint8_t* p, size_t len) {
   if (len < DP_OFFSET_PAYLOAD + DP_TLM_PAYLOAD_SIZE) return;
 
   // Prepend this node to the relay path, then forward/aggregate.
@@ -264,7 +264,7 @@ void NetworkManager::handleSensorData(const uint8_t* p, size_t len) {
   }
 }
 
-void NetworkManager::handleProvision(const uint8_t* p, size_t len) {
+void NetworkHandler::handleProvision(const uint8_t* p, size_t len) {
   if (len < DP_OFFSET_PAYLOAD + DP_PROV_PAYLOAD_SIZE) return;
 
   // Verify the Advanced Password hash carried in the packet.
@@ -296,7 +296,7 @@ void NetworkManager::handleProvision(const uint8_t* p, size_t len) {
   else                         _ap.broadcastFrame(ack, n);
 }
 
-void NetworkManager::handleProvisionAck(const uint8_t* p, size_t len) {
+void NetworkHandler::handleProvisionAck(const uint8_t* p, size_t len) {
   char nodeId[DP_NODEID_LEN + 1];
   memcpy(nodeId, p + DP_OFFSET_NODEID, DP_NODEID_LEN);
   nodeId[DP_NODEID_LEN] = '\0';
@@ -305,7 +305,7 @@ void NetworkManager::handleProvisionAck(const uint8_t* p, size_t len) {
   if (_cfg.role == ROLE_SLAVE) _sta.sendFrame(p, len);   // forward upstream to master
 }
 
-void NetworkManager::handleConfigSet(const uint8_t* p, size_t len) {
+void NetworkHandler::handleConfigSet(const uint8_t* p, size_t len) {
   if (len < DP_OFFSET_PAYLOAD + DP_CFG_PAYLOAD_SIZE) return;
 
   _cfg.ipMode = p[DP_CFG_OFF_IPMODE];
@@ -333,19 +333,19 @@ void NetworkManager::handleConfigSet(const uint8_t* p, size_t len) {
 // Outbound packets
 // ---------------------------------------------------------------------------
 
-void NetworkManager::sendHello() {
+void NetworkHandler::sendHello() {
   uint8_t packet[DP_MAX_PACKET_SIZE];
   size_t n = buildPacket(DP_TYPE_HELLO, _cfg.nodeId, nullptr, 0, packet, sizeof(packet));
   _sta.sendFrame(packet, n);
 }
 
-void NetworkManager::sendHeartbeat() {
+void NetworkHandler::sendHeartbeat() {
   uint8_t packet[DP_MAX_PACKET_SIZE];
   size_t n = buildPacket(DP_TYPE_HEARTBEAT, _cfg.nodeId, nullptr, 0, packet, sizeof(packet));
   _sta.sendFrame(packet, n);
 }
 
-void NetworkManager::sendOwnTelemetry() {
+void NetworkHandler::sendOwnTelemetry() {
   if (!_lastReading.valid) return;
 
   uint8_t payload[DP_MAX_PAYLOAD];
@@ -386,7 +386,7 @@ void NetworkManager::sendOwnTelemetry() {
 // Telemetry aggregation + host upload
 // ---------------------------------------------------------------------------
 
-void NetworkManager::pushTelemetry(const uint8_t* p, size_t len, bool toHost) {
+void NetworkHandler::pushTelemetry(const uint8_t* p, size_t len, bool toHost) {
   if (!p || len < DP_OFFSET_PAYLOAD + DP_TLM_PAYLOAD_SIZE) return;
 
   TelemetryEntry e;
@@ -410,7 +410,7 @@ void NetworkManager::pushTelemetry(const uint8_t* p, size_t len, bool toHost) {
   if (toHost) uploadToHost(e, len);
 }
 
-void NetworkManager::uploadToHost(const TelemetryEntry& e, size_t payloadSize) {
+void NetworkHandler::uploadToHost(const TelemetryEntry& e, size_t payloadSize) {
   char macStr[18];
   snprintf(macStr, sizeof(macStr), "%02X:%02X:%02X:%02X:%02X:%02X",
            e.mac[0], e.mac[1], e.mac[2], e.mac[3], e.mac[4], e.mac[5]);
@@ -449,11 +449,11 @@ void NetworkManager::uploadToHost(const TelemetryEntry& e, size_t payloadSize) {
 #endif
 }
 
-void NetworkManager::notifyDataCallback(const uint8_t* packet, size_t len) {
+void NetworkHandler::notifyDataCallback(const uint8_t* packet, size_t len) {
   if (_dataCb) _dataCb(packet, len);
 }
 
-bool NetworkManager::telemetryAt(size_t i, TelemetryEntry& out) const {
+bool NetworkHandler::telemetryAt(size_t i, TelemetryEntry& out) const {
   if (i >= _ringCount) return false;
   size_t idx = (_ringHead + TELEMETRY_RING - _ringCount + i) % TELEMETRY_RING;
   out = _ring[idx];
@@ -464,7 +464,7 @@ bool NetworkManager::telemetryAt(size_t i, TelemetryEntry& out) const {
 // Advanced actions
 // ---------------------------------------------------------------------------
 
-bool NetworkManager::setHotspotPassword(const char* psk) {
+bool NetworkHandler::setHotspotPassword(const char* psk) {
   if (!psk || strlen(psk) < 8) return false;
   strlcpy(_cfg.apPsk, psk, sizeof(_cfg.apPsk));
   ConfigStore::save(_cfg);
@@ -479,7 +479,7 @@ bool NetworkManager::setHotspotPassword(const char* psk) {
   return true;
 }
 
-bool NetworkManager::provision(const char* apPsk, bool applyToAll) {
+bool NetworkHandler::provision(const char* apPsk, bool applyToAll) {
   if (!apPsk || !apPsk[0]) return false;
   strlcpy(_cfg.apPsk, apPsk, sizeof(_cfg.apPsk));
   ConfigStore::save(_cfg);
@@ -502,7 +502,7 @@ bool NetworkManager::provision(const char* apPsk, bool applyToAll) {
   return true;
 }
 
-String NetworkManager::ipAddress() const {
+String NetworkHandler::ipAddress() const {
   if (_cfg.role == ROLE_SLAVE) {
     IPAddress ip = _sta.ip();
     return ip.toString();
