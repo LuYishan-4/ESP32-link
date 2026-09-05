@@ -10,7 +10,9 @@ void ApController::buildSsid(char* out, size_t outLen, const char* nodeId) {
 
 bool ApController::begin(const char* ssid, const char* psk, uint8_t channel) {
   stop();
-  if (!WiFi.softAP(ssid, psk ? psk : "", channel, 0, 4)) return false;
+  // Hidden network (ssid_hidden = 1). Normal M/S nodes broadcast NODE_<id>
+  // as a hidden AP; the STA side scans with show_hidden=true to find it.
+  if (!WiFi.softAP(ssid, psk ? psk : "", channel, 1, 4)) return false;
   _ip      = WiFi.softAPIP();
   _running = true;
   return true;

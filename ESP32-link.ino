@@ -10,14 +10,18 @@
 
 NetworkHandler      g_net;
 WebServerController g_web;
+GpioManager        g_gpio;
 
 void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println("\n\nESP32 Master/Slave Hotspot Mesh boot");
 
-  GpioManager::begin();
-  g_net.begin();
+  g_gpio.begin();
+  // Boot-mode selection: if the setup GPIO is held at boot we enter SETUP
+  // (batch-config) mode, otherwise normal Master/Slave operation.
+  bool setupMode = g_gpio.setupModeRequested();
+  g_net.begin(setupMode);
   g_web.begin(g_net);
 
   // OTA firmware update (gated behind the Advanced Password in the UI flow).
@@ -31,7 +35,7 @@ void setup() {
 
 void loop() {
   g_net.loop();
-  GpioManager::loop();
+  g_gpio.loop();
   ArduinoOTA.handle();
   delay(5);
 } 

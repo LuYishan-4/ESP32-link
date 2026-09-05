@@ -22,6 +22,17 @@
 #define HOST_INGEST_URL ""
 #endif
 
+// Fixed WiFi network the device joins when it boots into SETUP mode (GPIO held
+// at boot). This lets a technician's laptop on the same network reach every
+// device's web panel for batch configuration. Fill in the real values or pass
+// them via build flags (-DSETUP_WIFI_SSID=...).
+#ifndef SETUP_WIFI_SSID
+#define SETUP_WIFI_SSID "NODE_SETUP"
+#endif
+#ifndef SETUP_WIFI_PWD
+#define SETUP_WIFI_PWD   "NODE_SETUP_DEFAULT_PASSWORD"
+#endif
+
 struct NodeConfig {
   uint8_t  role            = ROLE_MASTER;
 

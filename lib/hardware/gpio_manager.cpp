@@ -51,3 +51,13 @@ void GpioManager::loop() {
 void GpioManager::setSensorPower(bool on) {
   digitalWrite(BOARD_SENSOR_POWER_PIN, on ? HIGH : LOW);
 }
+
+bool GpioManager::setupModeRequested() {
+  pinMode(BOARD_SETUP_PIN, INPUT_PULLUP);
+  delay(60);                       // let the pin settle / allow the user to hold it
+  int v = digitalRead(BOARD_SETUP_PIN);
+  bool setup = BOARD_SETUP_ACTIVE_LOW ? (v == LOW) : (v == HIGH);
+  Serial.printf("[boot] setup pin GPIO%d=%d -> %s\n",
+                BOARD_SETUP_PIN, v, setup ? "SETUP MODE" : "NORMAL MODE");
+  return setup;
+}

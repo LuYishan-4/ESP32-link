@@ -16,7 +16,7 @@
 #include "lib/datapacket/datapacket.h"
 
 enum class NetState : uint8_t {
-  BOOT, CONFIG_LOAD, MASTER_INIT, SLAVE_INIT, RUNNING
+  BOOT, CONFIG_LOAD, SETUP, MASTER_INIT, SLAVE_INIT, RUNNING
 };
 
 // Recent telemetry snapshot (served by /api/data and forwarded over WS).
@@ -33,11 +33,14 @@ class NetworkHandler {
 public:
   using DataCallback = std::function<void(const uint8_t* packet, size_t len)>;
 
-  void begin();
+  // setupMode: true = boot into SETUP mode (join the fixed config WiFi and
+  // serve the web panel for batch configuration), false = normal M/S operation.
+  void begin(bool setupMode);
   void loop();
 
   NodeConfig& config() { return _cfg; }
   NetState    state() const { return _state; }
+  bool        setupMode() const { return _setupMode; }
   const char* roleName() const { return _cfg.role == ROLE_SLAVE ? "slave" : "master"; }
 
   bool saveConfig();
@@ -76,7 +79,8 @@ public:
 
   void setDataCallback(DataCallback cb) { _dataCb = cb; }
 
-private:
+prbool       _setupMode = false;
+  ivate:
   NodeConfig _cfg;
   NetState   _state = NetState::BOOT;
   uint32_t   _bootMs = 0;
@@ -94,6 +98,7 @@ private:
   uint32_t _lastTelemetryMs = 0;
   uint32_t _lastHeartbeatMs = 0;
   bool     _staWasConnected = false;
+  bool     _setupWifiAnnounced = false;
 
   DataCallback _dataCb;
 
@@ -106,7 +111,9 @@ private:
   size_t _ringHead  = 0;
   size_t _ringCount = 0;
 
-  void loadConfig();
+  void loadCSetupMode();
+  void handleSetupLoop();
+  void startonfig();
   void startMaster();
   void startSlave();
   void updateRelay();

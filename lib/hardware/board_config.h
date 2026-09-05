@@ -14,6 +14,13 @@
 // Optional sensor power switch.
 #define BOARD_SENSOR_POWER_PIN  25
 
+// Setup-mode GPIO input. Hold LOW at boot to enter SETUP (batch-config) mode
+// instead of the normal M/S operation. NOTE: on classic ESP32 modules GPIO 6-11
+// are tied to the SPI flash and are NOT usable — use an ESP32-S3 or pick
+// another free input pin on your board.
+#define BOARD_SETUP_PIN         6
+#define BOARD_SETUP_ACTIVE_LOW  1   // 1 = LOW triggers SETUP mode
+
 // ADC settings.
 #define BOARD_ADC_RESOLUTION    4095
 #define BOARD_ADC_ATTENUATION   11    // 11 dB ~= 0..3.3 V full scale

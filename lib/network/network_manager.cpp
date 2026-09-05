@@ -10,18 +10,55 @@
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-void NetworkHandler::begin() {
-  _bootMs = millis();
+void NetworkHandler::begin(bool setupMode) {
+  _bootMs    = millis();
+  _setupMode = setupMode;
   _sensor.begin();
   loadConfig();
+
+  if (_setupMode) { startSetupMode(); return; }
 
   if (_cfg.role == ROLE_MASTER) startMaster();
   else                          startSlave();
 }
 
 void NetworkHandler::loop() {
+  if (_setupMode) { handleSetupLoop(); return; }
   if (_cfg.role == ROLE_MASTER) handleMasterLoop();
   else                          handleSlaveLoop();
+}
+
+void NetworkHandler::startSetupMode() {
+  _state = NetState::SETUP;
+  _ap.stop();
+
+  // Open + VISIBLE config AP so a phone/PC can reach this device's web panel
+  // directly. SSID is broadcast (not hidden) and has NO password.
+  String setupSsid = String(AP_SSID_PREFIX) + _cfg.nodeId;   // NODE_<id>, open
+  WiFi.mode(WIFI_AP_STA);   // need AP (direct config) + STA (batch WiFi)
+  WiFi.softAP(setupSsid.c_str());           // empty passphrase => open network
+  _apSsid = setupSsid;
+  Serial.printf("[setup] open AP '%s' (no password, visible)\n", setupSsid.c_str());
+
+  // Also try to join the fixed WiFi so the batch laptop can reach every
+  // device over one network for batch configuration.
+  if (SETUP_WIFI_SSID[0]) {
+    WiFi.begin(SETUP_WIFI_SSID, SETUP_WIFI_PWD);
+    WiFi.setAutoReconnect(true);
+    Serial.printf("[setup] joining fixed config wifi '%s'\n", SETUP_WIFI_SSID);
+  } else {
+    Serial.println("[setup] note: SETUP_WIFI_SSID empty, batch WiFi not joined");
+  }
+}
+
+void NetworkHandler::handleSetupLoop() {
+  // The ESP32 STA auto-reconnects to the fixed WiFi once credentials are set;
+  // nothing extra to drive here. Web server & WS run independently in .ino.
+  if (SETUP_WIFI_SSID[0] && WiFi.status() == WL_CONNECTED && !_setupWifiAnnounced) {
+    _setupWifiAnnounced = true;
+    Serial.printf("[setup] connected to '%s', ip=%s\n",
+                  SETUP_WIFI_SSID, WiFi.localIP().toString().c_str());
+  }
 }
 
 void NetworkHandler::loadConfig() {
