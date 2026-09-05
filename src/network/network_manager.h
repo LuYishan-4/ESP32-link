@@ -8,12 +8,12 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "lib/config/config.h"
-#include "lib/config/config_store.h"
-#include "lib/network/ap_controller.h"
-#include "lib/network/sta_controller.h"
-#include "lib/hardware/sensor_driver.h"
-#include "lib/datapacket/datapacket.h"
+#include "../config/config.h"
+#include "../config/config_store.h"
+#include "../network/ap_controller.h"
+#include "../network/sta_controller.h"
+#include "../hardware/sensor_driver.h"
+#include "../datapacket/datapacket.h"
 
 enum class NetState : uint8_t {
   BOOT, CONFIG_LOAD, SETUP, MASTER_INIT, SLAVE_INIT, RUNNING
@@ -79,8 +79,8 @@ public:
 
   void setDataCallback(DataCallback cb) { _dataCb = cb; }
 
-prbool       _setupMode = false;
-  ivate:
+private:
+  bool       _setupMode = false;
   NodeConfig _cfg;
   NetState   _state = NetState::BOOT;
   uint32_t   _bootMs = 0;
@@ -111,9 +111,9 @@ prbool       _setupMode = false;
   size_t _ringHead  = 0;
   size_t _ringCount = 0;
 
-  void loadCSetupMode();
+  void loadConfig();
+  void startSetupMode();
   void handleSetupLoop();
-  void startonfig();
   void startMaster();
   void startSlave();
   void updateRelay();

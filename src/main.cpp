@@ -1,12 +1,11 @@
-// main.ino — Arduino IDE entry point (equivalent to src/main.cpp for PlatformIO).
-// When using the Arduino IDE, copy the lib/ folder next to this sketch or
-// prefer the PlatformIO build in this repository.
+// main.cpp — PlatformIO entry point.
+// Modules live under src/ (config, datapacket, hardware, math, network, webservice).
 #include <Arduino.h>
 #include <ArduinoOTA.h>
 
-#include "lib/network/network_manager.h"
-#include "lib/webservice/web_server.h"
-#include "lib/hardware/gpio_manager.h"
+#include "network/network_manager.h"
+#include "webservice/web_server.h"
+#include "hardware/gpio_manager.h"
 
 NetworkHandler      g_net;
 WebServerController g_web;
@@ -14,7 +13,10 @@ GpioManager        g_gpio;
 
 void setup() {
   Serial.begin(115200);
-  delay(200);
+  // ESP32-C3 uses the on-chip USB-Serial/JTAG for `Serial`. On a hardware reset
+  // (RST/EN) the USB re-enumerates, so early boot prints get dropped unless we
+  // give the host time to re-attach first.
+  delay(1000);
   Serial.println("\n\nESP32 Master/Slave Hotspot Mesh boot");
 
   g_gpio.begin();
@@ -37,5 +39,16 @@ void loop() {
   g_net.loop();
   g_gpio.loop();
   ArduinoOTA.handle();
+
+  // Periodic heartbeat so the serial monitor always shows output regardless of
+  // the reset timing (ESP32-C3 native USB drops the very first boot lines when
+  // pressing RST). Confirms Serial works and shows the active mode.
+  static uint32_t lastLog = 0;
+  if (millis() - lastLog >= 5000) {
+    lastLog = millis();
+    Serial.printf("[main] uptime=%lus mode=%s\n", millis() / 1000,
+                  g_net.setupMode() ? "SETUP" : "NORMAL");
+  }
+
   delay(5);
 } 

@@ -1,8 +1,8 @@
 // lib/hardware/sensor_driver.cpp
 #include "sensor_driver.h"
 #include "board_config.h"
-#include "math/calibration.hpp"
-#include "math/filters.hpp"
+#include "../math/calibration.hpp"
+#include "../math/filters.hpp"
 #include <Arduino.h>
 
 static math::MovingAverage<uint16_t, 8> s_phFilter;

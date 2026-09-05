@@ -462,7 +462,8 @@ void NetworkHandler::uploadToHost(const TelemetryEntry& e, size_t payloadSize) {
     e.ph, e.light, e.moisture, (unsigned)e.sensorType, (unsigned)payloadSize);
   Serial.println(sql);
 
-#if defined(HOST_INGEST_URL) && HOST_INGEST_URL[0] != '\0'
+#if defined(HOST_INGEST_URL)
+  if (HOST_INGEST_URL[0] != '\0') {   // runtime check: only POST if a URL is configured
   StaticJsonDocument<512> doc;
   doc["time"]          = e.time;
   doc["node_mac"]      = macStr;
@@ -483,6 +484,7 @@ void NetworkHandler::uploadToHost(const TelemetryEntry& e, size_t payloadSize) {
   int code = http.POST(body);
   Serial.printf("[host] ingest %s -> HTTP %d\n", e.nodeId, code);
   http.end();
+  }
 #endif
 }
 

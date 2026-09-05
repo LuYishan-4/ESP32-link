@@ -5,7 +5,7 @@
 #include <ArduinoJson.h>
 #include <string.h>
 
-#include "lib/network/network_manager.h"
+#include "../network/network_manager.h"
 
 static String ipToStr(const uint8_t ip[4]) {
   char b[16];

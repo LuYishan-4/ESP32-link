@@ -6,8 +6,8 @@
 #include <WiFi.h>
 #include <stdint.h>
 #include <stddef.h>
-#include "lib/datapacket/dp_common.h"
-#include "lib/config/config.h"
+#include "../datapacket/dp_common.h"
+#include "../config/config.h"
 
 #define AP_MAX_DATA_CLIENTS 4
 

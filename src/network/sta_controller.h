@@ -6,8 +6,8 @@
 #include <WiFi.h>
 #include <stdint.h>
 #include <stddef.h>
-#include "lib/datapacket/dp_common.h"
-#include "lib/config/config.h"
+#include "../datapacket/dp_common.h"
+#include "../config/config.h"
 
 #define STA_MAX_SCAN_RESULTS 16
 
