@@ -12,6 +12,7 @@
 #include "../config/config_store.h"
 #include "../network/ap_controller.h"
 #include "../network/sta_controller.h"
+#include "../network/host_link.h"
 #include "../hardware/sensor_driver.h"
 #include "../datapacket/datapacket.h"
 #include "../mqtt/mqtt_ws.h"
@@ -89,6 +90,7 @@ private:
   ApController _ap;
   StaController _sta;
   SensorDriver _sensor;
+  HostLink _host;                 // UDP 4210 link to the Windows host (SETUP mode)
 
   bool   _relayActive = false;
   String _apSsid;

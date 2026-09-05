@@ -143,3 +143,23 @@ bool ConfigStore::erase() {
   prefs.end();
   return true;
 }
+
+bool ConfigStore::getChunkKey(char* out, size_t outLen) {
+  if (!out || outLen == 0) return false;
+  Preferences prefs;
+  if (!prefs.begin(CFG_NS, true)) { out[0] = '\0'; return false; }
+  if (!prefs.isKey("chunkKey")) { out[0] = '\0'; prefs.end(); return false; }
+  String s = prefs.getString("chunkKey", "");
+  prefs.end();
+  strlcpy(out, s.c_str(), outLen);
+  return out[0] != '\0';
+}
+
+bool ConfigStore::saveChunkKey(const char* key) {
+  if (!key || !key[0]) return false;
+  Preferences prefs;
+  if (!prefs.begin(CFG_NS, false)) return false;
+  prefs.putString("chunkKey", key);
+  prefs.end();
+  return true;
+}
