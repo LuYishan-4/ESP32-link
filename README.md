@@ -43,6 +43,75 @@
 
 ---
 
+## 🌿 Smart Irrigation, Adaptive AI & Plant Traceability
+
+The next Smart-Farm capability layer is designed around an independent
+`plant_id` for every pot, bed, or growing zone. Each zone keeps its own sensor
+calibration, irrigation settings, learning history, and audit trail; one
+plant's readings must never trigger another plant's valve.
+
+### Auto irrigation (安全自動澆水)
+
+- Use soil moisture, a configured minimum/target range, and an individual
+  zone's sensor health to decide whether irrigation is needed.
+- Enforce a maximum pump/valve runtime, post-watering cooldown, and
+  water-tank/sensor fault interlocks. A watchdog must turn the output off when
+  the allowed duration expires, including after network loss.
+- Keep automation **disabled by default**. An operator explicitly enables it
+  for each `plant_id` only after checking the GPIO, relay, valve and pipe
+  mapping.
+
+### Adaptive learning (AI 自我學習)
+
+Rather than allowing an opaque model to control hardware, the controller
+learns bounded, explainable parameters for each plant: its observed soil-dry
+rate and moisture gain per second of irrigation. Those values can slightly
+adjust the watering trigger for fast-drying zones, but never beyond the
+operator's safe min/target range. Every decision should retain its input
+readings, model version, calculated threshold, and reason so it can be
+reviewed or rolled back.
+
+### Multi-plant hash chain (多植物區塊鏈追溯)
+
+Each `plant_id` maintains an independent append-only event chain:
+
+```text
+Plant A: configuration → sensor reading → AI decision → watering start → watering stop
+Plant B: configuration → sensor reading → AI decision → alert
+                         └─ separate SHA-256-linked chain per plant_id
+```
+
+The event payload includes the previous hash and its own SHA-256 hash. Store
+the canonical chain in the cloud database, and let ESP32/Raspberry Pi retain a
+small offline queue for later upload. This provides tamper-evident traceability
+for settings, readings, watering operations, and fault alerts while preserving
+field operation during an uplink outage.
+
+### MVP experience layer (第二階段 MVP 功能)
+
+The following user-facing functions are lightweight enough for an MVP while
+making the Smart-Farm demo tangible and actionable:
+
+| Feature | MVP behaviour |
+| --- | --- |
+| **Plant QR Code** | Scan a `plant_id` QR code to open its live status, irrigation record, and care guidance. |
+| **One-click plant setup** | Select a crop template to prefill moisture, light, pH/EC ranges, and watering limits. |
+| **Today's tasks** | Prioritise low-moisture zones, overdue calibration, offline sensors, and harvest reminders. |
+| **Plant health score** | Show a 0–100 score from moisture, light, pH, EC, recent alerts, and connection quality. |
+| **Pest/disease photo report** | Attach a photo and `plant_id` to create a traceable manual issue report; vision AI can follow later. |
+| **Water-use analytics** | Compare daily/weekly irrigation frequency and estimated consumption by zone to identify outliers. |
+| **Sensor data-quality state** | Clearly label normal, stale, missing, and implausible/jumping readings before they reach automation. |
+| **Approval-based AI tuning** | Present a proposed threshold change with evidence; never apply it until an operator approves it. |
+| **Plant life-cycle timeline** | Record sowing, transplant, flowering, and harvest beside irrigation and sensor history. |
+| **Demo mode** | Simulate multiple plants, drying curves, alerts, and irrigation outcomes when hardware is unavailable. |
+
+For a focused MVP, start with **Plant QR Code**, **health score**, **today's
+tasks**, and **demo mode**. These make the monitoring, automation, and
+multi-plant model easy to demonstrate without requiring every sensor or valve
+to be connected.
+
+---
+
 ## 🏗 System Architecture
 
 ```mermaid
