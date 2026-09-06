@@ -87,6 +87,29 @@ small offline queue for later upload. This provides tamper-evident traceability
 for settings, readings, watering operations, and fault alerts while preserving
 field operation during an uplink outage.
 
+### MVP experience layer (第二階段 MVP 功能)
+
+The following user-facing functions are lightweight enough for an MVP while
+making the Smart-Farm demo tangible and actionable:
+
+| Feature | MVP behaviour |
+| --- | --- |
+| **Plant QR Code** | Scan a `plant_id` QR code to open its live status, irrigation record, and care guidance. |
+| **One-click plant setup** | Select a crop template to prefill moisture, light, pH/EC ranges, and watering limits. |
+| **Today's tasks** | Prioritise low-moisture zones, overdue calibration, offline sensors, and harvest reminders. |
+| **Plant health score** | Show a 0–100 score from moisture, light, pH, EC, recent alerts, and connection quality. |
+| **Pest/disease photo report** | Attach a photo and `plant_id` to create a traceable manual issue report; vision AI can follow later. |
+| **Water-use analytics** | Compare daily/weekly irrigation frequency and estimated consumption by zone to identify outliers. |
+| **Sensor data-quality state** | Clearly label normal, stale, missing, and implausible/jumping readings before they reach automation. |
+| **Approval-based AI tuning** | Present a proposed threshold change with evidence; never apply it until an operator approves it. |
+| **Plant life-cycle timeline** | Record sowing, transplant, flowering, and harvest beside irrigation and sensor history. |
+| **Demo mode** | Simulate multiple plants, drying curves, alerts, and irrigation outcomes when hardware is unavailable. |
+
+For a focused MVP, start with **Plant QR Code**, **health score**, **today's
+tasks**, and **demo mode**. These make the monitoring, automation, and
+multi-plant model easy to demonstrate without requiring every sensor or valve
+to be connected.
+
 ---
 
 ## 🏗 System Architecture
