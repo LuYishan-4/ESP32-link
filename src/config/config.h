@@ -39,10 +39,10 @@ constexpr size_t DP_LABEL_LEN      = 48;    // pot / node label shown on backend
 // device's web panel for batch configuration. Fill in the real values or pass
 // them via build flags (-DSETUP_WIFI_SSID=...).
 #ifndef SETUP_WIFI_SSID
-#define SETUP_WIFI_SSID "ESP32_Host"
+#define SETUP_WIFI_SSID "vivoV30e"
 #endif
 #ifndef SETUP_WIFI_PWD
-#define SETUP_WIFI_PWD   "12345678"
+#define SETUP_WIFI_PWD   "25176399"
 #endif
 
 struct NodeConfig {
@@ -54,8 +54,8 @@ struct NodeConfig {
   char     nodeLabel[DP_LABEL_LEN + 1]        = "";   // backend pot/node label (slave)
   char     slaveToken[DP_ENROLL_LEN + 1]      = "";   // slave transfer token (auto binding)
 
-  char     upstreamSsid[DP_CFG_SSID_LEN + 1]  = "";          // master: site router SSID
-  char     upstreamPsk[DP_CFG_PSK_LEN + 1]    = "";          // master: site router password
+  char     upstreamSsid[DP_CFG_SSID_LEN + 1]  = "vivo V30ee";       // master: uplink router SSID (TEST)
+  char     upstreamPsk[DP_CFG_PSK_LEN + 1]    = "25176399";  // master: uplink router password (TEST)
 
   uint8_t  ipMode        = DP_CFG_IPMODE_DHCP;
   uint8_t  staticIp[4]   = {0, 0, 0, 0};
@@ -72,10 +72,12 @@ struct NodeConfig {
   uint16_t relayThreshold = 3;                               // auto-promote when AP nears N clients
 
   // Master: telemetry host upload (MQTT over WSS to the backend).
-  bool    hostEnabled = false;
+  // NOTE: host_token/mqtt_user below are TEST credentials for master-001 —
+  // erase-flash then reconfigure via the web panel before sharing this code.
+  bool    hostEnabled = true;
   char    hostUrl[DP_HOST_URL_LEN + 1]     = "wss://mqtt.rabbitsayhello.me/"; // broker
-  char    hostToken[DP_HOST_TOKEN_LEN + 1] = "";   // MQTT password (enrollment)
+  char    hostToken[DP_HOST_TOKEN_LEN + 1] = "h7cDAlxK5n3z8fqjAYQ7r6mrXwa4wYDx8LPoTNwaJjI"; // MQTT password
   char    masterId[DP_MASTER_ID_LEN + 1]   = "master-001";  // backend master_id
   char    enrollToken[DP_ENROLL_LEN + 1]   = "";   // one-time provisioning token
-  char    mqttUser[DP_MQTT_USER_LEN + 1]   = "";   // MQTT username (empty = masterId)
+  char    mqttUser[DP_MQTT_USER_LEN + 1]   = "master-001";   // MQTT username (= master_id)
 };

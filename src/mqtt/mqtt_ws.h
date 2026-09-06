@@ -57,6 +57,9 @@ private:
   bool wsSend(uint8_t opcode, const uint8_t* data, size_t len);
   // Reads one WebSocket frame body (opcode+payload). Returns false on error/EOF.
   bool wsRecv(uint8_t* out, size_t max, size_t* got, uint8_t* opcode);
+  // Reads one inbound WebSocket message payload (de-framed) within timeoutMs.
+  bool wsReadPayload(uint8_t* out, size_t max, size_t* got, uint8_t* opcode,
+                     uint32_t timeoutMs);
 
   // --- MQTT level (payloads travel inside WS binary frames) ---
   bool mqttConnect();

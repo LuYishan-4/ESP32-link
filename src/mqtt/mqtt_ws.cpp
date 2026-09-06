@@ -2,6 +2,7 @@
 #include "mqtt_ws.h"
 
 #include <esp_system.h>
+#include <errno.h>
 #include <string.h>
 #include <time.h>
 
@@ -130,6 +131,7 @@ bool MqttWs::wsHandshake() {
   req += "Connection: Upgrade\r\n";
   req += "Sec-WebSocket-Key: " + key + "\r\n";
   req += "Sec-WebSocket-Version: 13\r\n";
+  req += "Sec-WebSocket-Protocol: mqtt\r\n";   // MQTT-over-WebSocket subprotocol
   req += "\r\n";
 
   if (!writeAll((const uint8_t*)req.c_str(), req.length())) return false;
@@ -145,7 +147,11 @@ bool MqttWs::wsHandshake() {
     if (head.length() > 1024) return false;
     if (millis() - start > 10000) return false;
   }
-  if (head.indexOf(" 101 ") < 0 && head.indexOf("101 ") < 0) return false;
+  if (head.indexOf(" 101 ") < 0 && head.indexOf("101 ") < 0) {
+    Serial.printf("[mqtt] WS handshake fail. response: %.*s\n",
+                  head.length() > 240 ? 240 : (int)head.length(), head.c_str());
+    return false;
+  }
   _wsOpen = true;
   return true;
 }
@@ -211,6 +217,47 @@ bool MqttWs::wsRecv(uint8_t* out, size_t max, size_t* got, uint8_t* opcode) {
   if (masked && take) {
     for (size_t i = 0; i < take; i++) out[i] ^= mask[i & 3];
   }
+  *got = take;
+  return true;
+}
+
+// Reads one inbound WebSocket frame from the TLS stream and returns its
+// de-framed payload (one MQTT packet per WS message, as brokers send them).
+bool MqttWs::wsReadPayload(uint8_t* out, size_t max, size_t* got, uint8_t* opcode,
+                           uint32_t timeoutMs) {
+  *got = 0;
+  const uint32_t deadline = millis() + timeoutMs;
+  auto rd = [&](uint8_t* p) -> bool {
+    uint32_t now = millis();
+    if (now >= deadline) return false;
+    uint32_t budget = deadline - now;
+    if (budget > 2000) budget = 2000;
+    int v = readByte(budget);
+    if (v < 0) return false;
+    *p = (uint8_t)v;
+    return true;
+  };
+
+  uint8_t h0, h1;
+  if (!rd(&h0) || !rd(&h1)) return false;
+  if (opcode) *opcode = h0 & 0x0F;
+  const bool masked = (h1 & 0x80) != 0;
+  size_t len = h1 & 0x7F;
+  if (len == 126) {
+    uint8_t e[2]; if (!rd(&e[0]) || !rd(&e[1])) return false;
+    len = ((size_t)e[0] << 8) | e[1];
+  } else if (len == 127) {
+    uint8_t e[8]; for (int k = 0; k < 8; k++) if (!rd(&e[k])) return false;
+    len = 0;
+    for (int k = 0; k < 8; k++) len = (len << 8) | e[k];
+  }
+  uint8_t mask[4] = {0, 0, 0, 0};
+  if (masked) { for (int k = 0; k < 4; k++) if (!rd(&mask[k])) return false; }
+
+  size_t take = (len < max) ? len : max;
+  for (size_t k = 0; k < take; k++) if (!rd(&out[k])) return false;
+  for (size_t k = take; k < len; k++) { uint8_t d; if (!rd(&d)) return false; } // drain
+  if (masked && take) for (size_t k = 0; k < take; k++) out[k] ^= mask[k & 3];
   *got = take;
   return true;
 }
@@ -286,36 +333,31 @@ bool MqttWs::mqttSendPing() {
 // ---------------------------------------------------------------------------
 // MQTT receive
 // ---------------------------------------------------------------------------
-// Reads one raw MQTT packet (fixed header + remaining length + body) and acts
-// on it. Returns true when a packet was handled.
+// Reads one MQTT packet from one WS message and acts on it.
+// Returns true when a packet was handled.
 bool MqttWs::mqttWaitPacket(uint32_t timeoutMs, bool* handled) {
   *handled = false;
-  uint8_t h0;
-  if (!readN(&h0, 1, timeoutMs)) return false;
+  uint8_t buf[1024]; size_t got = 0; uint8_t op = 0;
+  if (!wsReadPayload(buf, sizeof(buf), &got, &op, timeoutMs)) return false;
+  if (got < 2) return false;
 
-  // Remaining length (varint)
-  size_t rem = 0; size_t mult = 1; uint8_t b;
+  size_t i = 1; size_t rl = 0, mult = 1; uint8_t b;
   do {
-    if (!readN(&b, 1, timeoutMs)) return false;
-    rem += (b & 0x7F) * mult;
+    if (i >= got) return false;
+    b = buf[i++];
+    rl += (size_t)(b & 0x7F) * mult;
     mult *= 128;
   } while (b & 0x80);
+  if (got < i + rl) return false;
 
-  uint8_t body[1024];
-  if (rem > sizeof(body)) return false;
-  if (rem && !readN(body, rem, timeoutMs)) return false;
-
-  const uint8_t type = h0 >> 4;
+  const uint8_t type = buf[0] >> 4;
   *handled = true;
   switch (type) {
     case 2:  // CONNACK (ignored here; mqttWaitFor handles it)
     case 13: // PINGRESP
       return true;
     case 4: { // PUBACK
-      if (rem >= 2 && _ack) {
-        const uint16_t id = be16(body);
-        _ack(id, true);
-      }
+      if (rl >= 2 && _ack) _ack(be16(buf + i), true);
       return true;
     }
     case 3: { // PUBLISH (inbound; we don't subscribe yet, but stay alive)
@@ -338,30 +380,31 @@ bool MqttWs::mqttWaitPacket(uint32_t timeoutMs, bool* handled) {
 bool MqttWs::mqttWaitFor(uint8_t wantType, uint32_t timeoutMs) {
   uint32_t start = millis();
   while (millis() - start < timeoutMs) {
-    uint8_t h0;
-    if (!readN(&h0, 1, 1000)) continue;
+    uint8_t buf[1024]; size_t got = 0; uint8_t op = 0;
+    uint32_t remaining = timeoutMs - (uint32_t)(millis() - start);
+    if (remaining == 0) break;
+    if (!wsReadPayload(buf, sizeof(buf), &got, &op, remaining)) break;
+    if (got < 2) continue;
 
-    size_t rem = 0, mult = 1; uint8_t b;
-    bool ok = true;
+    size_t i = 1; size_t rl = 0, mult = 1; uint8_t b;
     do {
-      if (!readN(&b, 1, 1000)) { ok = false; break; }
-      rem += (b & 0x7F) * mult;
+      if (i >= got) { rl = 0; break; }
+      b = buf[i++];
+      rl += (size_t)(b & 0x7F) * mult;
       mult *= 128;
     } while (b & 0x80);
-    if (!ok) continue;
 
-    uint8_t body[1024];
-    if (rem > sizeof(body)) return false;
-    if (rem && !readN(body, rem, 1000)) continue;
-
-    const uint8_t type = h0 >> 4;
+    const uint8_t type = buf[0] >> 4;
     if (type == wantType) {
-      if (wantType == 2) return (rem >= 2 && body[1] == 0); // CONNACK rc==0
-      return true;                                          // PUBACK / PINGRESP
+      if (wantType == 2) {            // CONNACK: body[0]=ack, body[1]=rc
+        return (rl >= 2 && i + 1 < got && buf[i + 1] == 0);
+      }
+      if (wantType == 4 && _ack && rl >= 2) _ack(be16(buf + i), true); // PUBACK
+      return true;                    // PINGRESP
     }
     // Handle others opportunistically.
     if (type == 12) { const uint8_t resp[2] = { 0xD0, 0x00 }; wsSend(0x2, resp, 2); }
-    if (type == 4 && _ack) { if (rem >= 2) _ack(be16(body), true); }
+    if (type == 4 && _ack && rl >= 2) _ack(be16(buf + i), true);
   }
   return false;
 }
@@ -395,6 +438,8 @@ bool MqttWs::connect(uint32_t timeoutMs) {
   while (millis() - start < timeoutMs) {
     // (Re)open TCP + TLS to wss endpoint.
     if (!_tls.connect(_host.c_str(), _port)) {
+      Serial.printf("[mqtt] tcp/tls connect failed %s:%u (errno %d)\n",
+                    _host.c_str(), (unsigned)_port, errno);
       _tls.stop();
       delay(500);
       continue;
@@ -405,12 +450,14 @@ bool MqttWs::connect(uint32_t timeoutMs) {
       continue;
     }
     if (!mqttConnect()) {
+      Serial.println("[mqtt] mqtt CONNACK failed/timeout");
       _tls.stop();
       _wsOpen = false;
       delay(500);
       continue;
     }
     _connected = true;
+    Serial.println("[mqtt] connected over WSS");
     return true;
   }
   _connected = false;
