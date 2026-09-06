@@ -16,7 +16,7 @@ static const char HTML_PAGE[] PROGMEM = R"htmlstr(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ESP NODE 設定中心</title>
+<title>ESP NODE Settings</title>
 <style>
 :root {
   color-scheme: light;
@@ -86,129 +86,129 @@ fieldset { padding:0; margin:0; border:0; } .mode-fieldset { margin: 25px 0 2px;
 <body>
 <div class="app-shell">
   <aside class="sidebar">
-    <a class="brand" href="#settings" aria-label="ESP NODE 設定中心首頁">
+    <a class="brand" href="#settings" aria-label="ESP NODE settings home">
       <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
       <span><strong>ESP NODE</strong><small>CONTROL PANEL</small></span>
     </a>
-    <nav aria-label="設定導覽">
-      <a class="nav-link active" href="#settings"><span>01</span>連線設定</a>
-      <a class="nav-link" href="#vps-status"><span>02</span>連線狀態</a>
-      <a class="nav-link" href="#config-preview"><span>03</span>設定預覽</a>
+    <nav aria-label="Settings navigation">
+      <a class="nav-link active" href="#settings"><span>01</span>Connection</a>
+      <a class="nav-link" href="#vps-status"><span>02</span>Live status</a>
+      <a class="nav-link" href="#config-preview"><span>03</span>Config preview</a>
     </nav>
     <div class="device-card">
       <span class="status-light idle" id="sidebarLight"></span>
-      <div><small>本機節點</small><strong id="sidebarStatus">讀取中…</strong></div>
+      <div><small>This node</small><strong id="sidebarStatus">Loading…</strong></div>
     </div>
     <p class="version">ESP NODE Firmware</p>
   </aside>
 
   <main>
     <header class="topbar">
-      <button class="menu-button" id="menuButton" type="button" aria-label="開啟選單">☰</button>
-      <div><p>DEVICE CONFIGURATION</p><h1>ESP NODE 設定中心</h1></div>
+      <button class="menu-button" id="menuButton" type="button" aria-label="Open menu">☰</button>
+      <div><p>DEVICE CONFIGURATION</p><h1>ESP NODE Settings</h1></div>
       <div class="top-status"><span class="status-light" id="topLight"></span>
-        <div><small>本機 IP</small><strong id="topIp">--</strong></div></div>
+        <div><small>Local IP</small><strong id="topIp">--</strong></div></div>
     </header>
 
     <div class="workspace">
       <section class="content" id="settings">
         <div class="section-heading">
-          <div><span class="section-number">01</span><div><p>CONNECTION SETUP</p><h2>裝置與 Host 連線設定</h2></div></div>
+          <div><span class="section-number">01</span><div><p>CONNECTION SETUP</p><h2>Device &amp; Host connection</h2></div></div>
         </div>
 
         <form id="settingsForm" novalidate>
           <fieldset class="mode-fieldset">
-            <legend>節點模式</legend>
+            <legend>Node mode</legend>
             <div class="mode-selector">
-              <label><input type="radio" name="nodeMode" value="master" checked /><span><b>主機</b><small>建立網路並上傳資料到 Host</small></span></label>
-              <label><input type="radio" name="nodeMode" value="slave" /><span><b>從機</b><small>配對主機並轉送感測資料</small></span></label>
+              <label><input type="radio" name="nodeMode" value="master" checked /><span><b>Master</b><small>Hosts a network and uploads data to Host</small></span></label>
+              <label><input type="radio" name="nodeMode" value="slave" /><span><b>Slave</b><small>Pairs with a Master and relays sensor data</small></span></label>
             </div>
           </fieldset>
 
           <div class="form-section">
-            <div class="form-section-title"><span>裝置</span><small>辨識這台 ESP NODE</small></div>
+            <div class="form-section-title"><span>Device</span><small>Identifies this ESP NODE</small></div>
             <div class="fields two-columns">
-              <label class="field"><span>裝置 ID (Node ID)</span>
+              <label class="field"><span>Device ID (Node ID)</span>
                 <input id="deviceId" name="deviceId" type="text" maxlength="8" required pattern="[A-Za-z0-9_-]+" />
-                <small>限 8 字元內英數與 - _</small></label>
-              <label class="field slave-only" hidden><span>主機 Node ID</span>
-                <input id="targetId" name="targetId" type="text" maxlength="8" placeholder="主機的 Node ID" /></label>
-              <label class="field slave-only" hidden><span>盆栽 / 節點名稱</span>
+                <small>Max 8 chars: letters, digits, - _</small></label>
+              <label class="field slave-only" hidden><span>Master Node ID</span>
+                <input id="targetId" name="targetId" type="text" maxlength="8" placeholder="Master Node ID" /></label>
+              <label class="field slave-only" hidden><span>Pot / node label</span>
                 <input id="nodeLabel" name="nodeLabel" type="text" maxlength="48" placeholder="Pot A" /></label>
-              <label class="field slave-only" hidden><span>Transfer token（綁定用）</span>
-                <div class="password-field"><input id="slaveTok" type="password" autocomplete="off" /><button class="reveal-button" type="button" data-target="slaveTok">顯示</button></div>
-                <small>連上主機時自動交給主機代送綁定</small></label>
-              <label class="field"><span>群組密碼 (連 NODE 網路)</span>
-                <div class="password-field"><input id="apPsk" name="apPsk" type="password" maxlength="64" /><button class="reveal-button" type="button" data-target="apPsk">顯示</button></div>
-                <small>主機與從機共用，也是 Wi-Fi 密碼</small></label>
+              <label class="field slave-only" hidden><span>Transfer token (binding)</span>
+                <div class="password-field"><input id="slaveTok" type="password" autocomplete="off" /><button class="reveal-button" type="button" data-target="slaveTok">Show</button></div>
+                <small>Handed to the Master on connect for auto-binding</small></label>
+              <label class="field"><span>Group password (join NODE)</span>
+                <div class="password-field"><input id="apPsk" name="apPsk" type="password" maxlength="64" /><button class="reveal-button" type="button" data-target="apPsk">Show</button></div>
+                <small>Shared by Master &amp; Slaves; also the Wi-Fi password</small></label>
             </div>
           </div>
 
           <div class="form-section host-only">
-            <div class="form-section-title"><span>Wi-Fi 上行</span><small>主機要連上的外部網路（選填）</small></div>
+            <div class="form-section-title"><span>Uplink Wi-Fi</span><small>External network the Master connects to (optional)</small></div>
             <div class="fields two-columns">
-              <label class="field"><span>Wi-Fi SSID</span><input id="wifiSsid" name="wifiSsid" type="text" placeholder="外部網路 SSID" /></label>
-              <label class="field"><span>Wi-Fi 密碼</span>
-                <div class="password-field"><input id="wifiPassword" name="wifiPassword" type="password" placeholder="密碼" /><button class="reveal-button" type="button" data-target="wifiPassword">顯示</button></div></label>
-              <label class="field"><span>位址配置</span><select id="ipMode" name="ipMode"><option value="dhcp">DHCP</option><option value="static">固定 IP</option></select></label>
-              <label class="field static-ip-field" hidden><span>固定 IP / 閘道 / 遮罩</span>
+              <label class="field"><span>Wi-Fi SSID</span><input id="wifiSsid" name="wifiSsid" type="text" placeholder="External network SSID" /></label>
+              <label class="field"><span>Wi-Fi password</span>
+                <div class="password-field"><input id="wifiPassword" name="wifiPassword" type="password" placeholder="Password" /><button class="reveal-button" type="button" data-target="wifiPassword">Show</button></div></label>
+              <label class="field"><span>IP mode</span><select id="ipMode" name="ipMode"><option value="dhcp">DHCP</option><option value="static">Static IP</option></select></label>
+              <label class="field static-ip-field" hidden><span>Static IP / Gateway / Subnet</span>
                 <div style="display:grid;gap:8px">
-                  <input id="sIp" type="text" placeholder="IP，例 192.168.1.80" />
-                  <input id="sGw" type="text" placeholder="Gateway，例 192.168.1.1" />
-                  <input id="sMask" type="text" placeholder="Subnet，例 255.255.255.0" />
+                  <input id="sIp" type="text" placeholder="IP e.g. 192.168.1.80" />
+                  <input id="sGw" type="text" placeholder="Gateway e.g. 192.168.1.1" />
+                  <input id="sMask" type="text" placeholder="Subnet e.g. 255.255.255.0" />
                 </div></label>
             </div>
           </div>
 
           <div class="form-section host-only">
-            <div class="form-section-title"><span>資料收集 Host</span><small>接收並寫入 SQL 的伺服器</small></div>
+            <div class="form-section-title"><span>Data host</span><small>Server that receives data and writes it to SQL</small></div>
             <div class="fields">
               <label class="field" style="display:flex;align-items:center;gap:8px;flex-direction:row">
-                <input type="checkbox" id="hostEnabled" style="width:auto"> 啟用上傳到 Host</label>
-              <label class="field"><span>Broker URL（WSS）</span>
+                <input type="checkbox" id="hostEnabled" style="width:auto"> Upload to Host</label>
+              <label class="field"><span>Broker URL (WSS)</span>
                 <input id="hostUrl" type="text" placeholder="wss://mqtt.rabbitsayhello.me/" /></label>
-              <label class="field"><span>MQTT 密碼 <i>enrollment 取得</i></span>
-                <div class="password-field"><input id="hostToken" type="password" autocomplete="off" /><button class="reveal-button" type="button" data-target="hostToken">顯示</button></div></label>
+              <label class="field"><span>MQTT password <i>from enrollment</i></span>
+                <div class="password-field"><input id="hostToken" type="password" autocomplete="off" /><button class="reveal-button" type="button" data-target="hostToken">Show</button></div></label>
               <label class="field"><span>Master ID</span>
                 <input id="masterId" type="text" maxlength="32" placeholder="master-001" /></label>
-              <label class="field"><span>Enrollment token（一次性）</span>
-                <div class="password-field"><input id="enrollToken" type="password" autocomplete="off" /><button class="reveal-button" type="button" data-target="enrollToken">顯示</button></div></label>
+              <label class="field"><span>Enrollment token (one-time)</span>
+                <div class="password-field"><input id="enrollToken" type="password" autocomplete="off" /><button class="reveal-button" type="button" data-target="enrollToken">Show</button></div></label>
             </div>
           </div>
 
           <div class="form-section host-only">
-            <div class="form-section-title"><span>中繼 / 節點</span><small>（從機模式下才有意義）</small></div>
+            <div class="form-section-title"><span>Relay / nodes</span><small>only relevant in Slave mode</small></div>
             <div class="fields two-columns">
               <label class="field"><span>Relay</span><select id="relay">
-                <option value="0">關閉</option><option value="1">開啟（手動）</option><option value="2">自動</option></select></label>
-              <label class="field"><span>自動提升門檻</span><input id="relayThr" type="number" min="1" max="8" /></label>
+                <option value="0">Off</option><option value="1">On (manual)</option><option value="2">Auto</option></select></label>
+              <label class="field"><span>Auto-promote threshold</span><input id="relayThr" type="number" min="1" max="8" /></label>
             </div>
           </div>
 
           <div class="form-actions">
-            <button class="button secondary" id="testButton" type="button"><span>◌</span>讀取 / 測試</button>
-            <button class="button primary" type="submit">儲存設定</button>
-            <button class="button dark" id="rebootBtn" type="button">套用並重新啟動</button>
+            <button class="button secondary" id="testButton" type="button"><span>◌</span>Read / Test</button>
+            <button class="button primary" type="submit">Save Settings</button>
+            <button class="button dark" id="rebootBtn" type="button">Apply &amp; reboot</button>
           </div>
         </form>
       </section>
 
       <aside class="inspector">
         <section class="status-panel" id="vps-status">
-          <div class="panel-heading"><div><p>LIVE STATUS</p><h2>連線狀態</h2></div><span class="status-badge idle" id="overallBadge">讀取中</span></div>
+          <div class="panel-heading"><div><p>LIVE STATUS</p><h2>Connection status</h2></div><span class="status-badge idle" id="overallBadge">Loading</span></div>
           <ol class="connection-steps">
-            <li data-step="config"><span class="step-icon">1</span><div><strong>設定檢查</strong><small id="stConfig">等待讀取</small></div></li>
-            <li data-step="wifi"><span class="step-icon">2</span><div><strong>Wi-Fi</strong><small id="stWifi">尚未連線</small></div></li>
-            <li data-step="host"><span class="step-icon">3</span><div><strong>Host 上傳</strong><small id="stHost">未啟用</small></div></li>
-            <li data-step="ready"><span class="step-icon">4</span><div><strong>資料通道</strong><small id="stChannel">等待節點</small></div></li>
+            <li data-step="config"><span class="step-icon">1</span><div><strong>Config check</strong><small id="stConfig">Waiting to read</small></div></li>
+            <li data-step="wifi"><span class="step-icon">2</span><div><strong>Wi-Fi</strong><small id="stWifi">Not connected</small></div></li>
+            <li data-step="host"><span class="step-icon">3</span><div><strong>Host upload</strong><small id="stHost">Disabled</small></div></li>
+            <li data-step="ready"><span class="step-icon">4</span><div><strong>Data channel</strong><small id="stChannel">Waiting for node</small></div></li>
           </ol>
-          <div class="latency"><span>最近延遲</span><strong id="latencyValue">-- ms</strong></div>
+          <div class="latency"><span>Latest latency</span><strong id="latencyValue">-- ms</strong></div>
         </section>
 
         <section class="preview-panel" id="config-preview">
-          <div class="panel-heading"><div><p>CONFIG PREVIEW</p><h2>設定預覽</h2></div><button id="copyButton" class="icon-text-button" type="button">複製</button></div>
-          <pre><code id="configJson">（尚未讀取）</code></pre>
-          <div class="saved-note"><span>✓</span><p><strong id="saveState">尚未寫入裝置</strong><small id="saveTime">從 /api/config 讀取</small></p></div>
+          <div class="panel-heading"><div><p>CONFIG PREVIEW</p><h2>Settings preview</h2></div><button id="copyButton" class="icon-text-button" type="button">Copy</button></div>
+          <pre><code id="configJson">(not read yet)</code></pre>
+          <div class="saved-note"><span>✓</span><p><strong id="saveState">Not written to the device yet</strong><small id="saveTime">Read from /api/config</small></p></div>
         </section>
       </aside>
     </div>
@@ -288,17 +288,17 @@ function showPreview(c){ $("configJson").textContent = JSON.stringify(c, null, 2
 function updateSteps(st, cfg){
   const c = cfg || lastConfig || {};
   if(st) {
-    setStep("config", "done", "Node " + (st.node_id || "-") + " · " + (st.role === "slave" ? "從機" : "主機"));
+    setStep("config", "done", "Node " + (st.node_id || "-") + " · " + (st.role === "slave" ? "Slave" : "Master"));
     setStep("wifi", st.sta_connected ? "done" : (st.ap_running ? "active" : ""),
-            st.sta_connected ? "STA 已連線 " + (st.sta_rssi || "?") + " dBm" : (st.ap_running ? "僅 AP 模式" : "未連線"));
+            st.sta_connected ? "STA connected " + (st.sta_rssi || "?") + " dBm" : (st.ap_running ? "AP mode only" : "Not connected"));
   }
   if (c) {
     setStep("host", (c.host_enabled && c.host_url) ? "done" : (c.host_enabled ? "error" : ""),
-            (c.host_enabled && c.host_url) ? "已啟用 → " + c.host_url : (c.host_enabled ? "缺少 URL" : "未啟用"));
+            (c.host_enabled && c.host_url) ? "Enabled → " + c.host_url : (c.host_enabled ? "Missing URL" : "Disabled"));
   }
   if (st) {
     setStep("ready", (st.children > 0) ? "done" : "",
-            (st.children > 0) ? "已連子節點 " + st.children + " 台" : "等待節點 / 資料");
+            (st.children > 0) ? st.children + " child node(s) bound" : "Waiting for node / data");
   }
 }
 
@@ -307,25 +307,25 @@ async function refreshStatus(){
     const st = await jget("/api/status");
     lastStatus = st;
     const ok = st.ap_running || st.sta_connected;
-    $("sidebarStatus").textContent = (st.role === "slave" ? "從機" : "主機") + " " + (st.node_id || "");
+    $("sidebarStatus").textContent = (st.role === "slave" ? "Slave" : "Master") + " " + (st.node_id || "");
     $("sidebarLight").className = "status-light" + (ok ? "" : " idle");
     $("topLight").className = "status-light" + (ok ? "" : " idle");
     $("topIp").textContent = st.ip || "--";
     $("overallBadge").className = "status-badge " + (ok ? "success" : "idle");
-    $("overallBadge").textContent = ok ? "正常" : "等待連線";
+    $("overallBadge").textContent = ok ? "OK" : "Connecting…";
     updateSteps(st);
   } catch (e) {
-    $("sidebarStatus").textContent = "無法連線";
+    $("sidebarStatus").textContent = "Unreachable";
     $("sidebarLight").className = "status-light error";
     $("topIp").textContent = "--";
     $("overallBadge").className = "status-badge error";
-    $("overallBadge").textContent = "離線";
+    $("overallBadge").textContent = "Offline";
   }
 }
 
 async function doTest(){
   const btn = $("testButton"); btn.disabled = true;
-  $("overallBadge").className = "status-badge testing"; $("overallBadge").textContent = "測試中";
+  $("overallBadge").className = "status-badge testing"; $("overallBadge").textContent = "Testing";
   const t0 = performance.now();
   try {
     const st = await jget("/api/status");
@@ -335,12 +335,12 @@ async function doTest(){
     const ms = Math.max(1, Math.round(performance.now() - t0));
     $("latencyValue").textContent = ms + " ms";
     updateSteps(st, c);
-    $("overallBadge").className = "status-badge success"; $("overallBadge").textContent = "正常";
-    $("saveState").textContent = "已與裝置同步";
-    toast("已從裝置讀取設定與狀態");
+    $("overallBadge").className = "status-badge success"; $("overallBadge").textContent = "OK";
+    $("saveState").textContent = "In sync with the device";
+    toast("Read config & status from the device");
   } catch (e) {
-    $("overallBadge").className = "status-badge error"; $("overallBadge").textContent = "無法連線";
-    toast("無法連線裝置：" + e.message, "error");
+    $("overallBadge").className = "status-badge error"; $("overallBadge").textContent = "Unreachable";
+    toast("Cannot reach device: " + e.message, "error");
   } finally { btn.disabled = false; }
 }
 
@@ -349,15 +349,22 @@ async function saveConfig(reboot){
   const body = collect();
   try {
     const r = await jpost("/api/config", body);
-    if (!r.ok) { toast("儲存失敗" + (r.err ? "：" + r.err : ""), "error"); return; }
+    if (!r.ok) { toast("Save failed" + (r.err ? ": " + r.err : ""), "error"); return; }
     const c = await jget("/api/config");
     lastConfig = c; showPreview(c); updateSteps(lastStatus, c);
-    $("saveState").textContent = "已寫入裝置";
-    $("saveTime").textContent = new Date().toLocaleTimeString() + "（NVS）";
-    toast(reboot ? "已儲存，正在重新啟動…" : "設定已寫入（Wi-Fi/角色變更需重啟）");
-    if (reboot) { await jpost("/api/reboot", {}); }
+    $("saveState").textContent = "Written to the device";
+    $("saveTime").textContent = new Date().toLocaleTimeString() + " (NVS)";
+    if (reboot) {
+      toast("Saved, restarting…");
+      await jpost("/api/reboot", {});
+    } else {
+      // Apply live (re-init role/AP/STA) so settings take effect now.
+      toast("Saved & applied (Wi-Fi/role changes may reconnect briefly)");
+      try { await jpost("/api/apply", {}); }
+      catch (e) { /* page may drop while AP/STA restarts - reconnect to continue */ }
+    }
   } catch (e) {
-    toast("寫入失敗：" + e.message, "error");
+    toast("Write failed: " + e.message, "error");
   } finally { if(reboot && btn) btn.disabled = false; }
 }
 
@@ -366,14 +373,14 @@ $("#testButton").addEventListener("click", doTest);
 $("#rebootBtn").addEventListener("click", function(){ saveConfig(true); });
 $("#copyButton").addEventListener("click", function(){
   const t = $("configJson").textContent;
-  if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(function(){ toast("設定 JSON 已複製"); }); }
-  else { toast("瀏覽器未允許剪貼簿", "error"); }
+  if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(function(){ toast("Config JSON copied"); }); }
+  else { toast("Clipboard not allowed by the browser", "error"); }
 });
 $qa(".reveal-button").forEach(function(b){ b.addEventListener("click", function(){
   const inp = $(b.dataset.target); if(!inp) return;
   const show = inp.type === "password";
   inp.type = show ? "text" : "password";
-  b.textContent = show ? "隱藏" : "顯示";
+  b.textContent = show ? "Hide" : "Show";
 }); });
 $qa('input[name=nodeMode]').forEach(function(r){ r.addEventListener("change", refreshModeUI); });
 $("ipMode").addEventListener("change", refreshModeUI);

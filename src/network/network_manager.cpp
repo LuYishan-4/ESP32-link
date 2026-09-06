@@ -148,6 +148,19 @@ void NetworkHandler::begin(bool setupMode) {
 }
 
 void NetworkHandler::loop() {
+  // Deferred actions are executed here (main context), never inside a web
+  // server callback where stopping WiFi / restarting can crash the device.
+  if (_rebootPending) {
+    _rebootPending = false;
+    delay(300);
+    ESP.restart();
+  }
+  if (_applyPending) {
+    _applyPending = false;
+    applyConfig();
+    return;   // skip this tick; role may have changed
+  }
+
   if (_setupMode) { handleSetupLoop(); return; }
   if (_cfg.role == ROLE_MASTER) handleMasterLoop();
   else                          handleSlaveLoop();

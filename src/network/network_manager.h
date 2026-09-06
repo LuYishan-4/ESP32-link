@@ -48,6 +48,8 @@ public:
   bool saveConfig();
   void applyConfig();                       // reload persisted config and (re)start role
   void requestRoleSwitch(uint8_t role);     // persist; Wi-Fi mode change needs reboot
+  void requestReboot() { _rebootPending = true; }   // handled by loop()
+  void requestApply()  { _applyPending = true; }    // handled by loop()
 
   // Status for /api/status.
   bool     staConnected() const { return _sta.isConnected(); }
@@ -82,7 +84,9 @@ public:
   void setDataCallback(DataCallback cb) { _dataCb = cb; }
 
 private:
-  bool       _setupMode = false;
+  bool     _setupMode = false;
+  bool     _applyPending  = false;
+  bool     _rebootPending = false;
   NodeConfig _cfg;
   NetState   _state = NetState::BOOT;
   uint32_t   _bootMs = 0;

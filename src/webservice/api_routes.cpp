@@ -196,6 +196,15 @@ void registerApiRoutes(AsyncWebServer& server, AsyncWebSocket& ws, NetworkHandle
       req->send(200, "application/json", "{\"ok\":true}");
     });
 
+  // Persisted config is already applied to the live NodeConfig by POST; this
+  // re-initializes the role / AP / STA so Wi-Fi & role changes take effect now.
+  server.on("/api/apply", HTTP_POST,
+    [](AsyncWebServerRequest*) {}, nullptr,
+    [&net](AsyncWebServerRequest* req, uint8_t*, size_t, size_t, size_t) {
+      net.requestApply();   // applied from the main loop (safe)
+      req->send(200, "application/json", "{\"ok\":true}");
+    });
+
   server.on("/api/scan", HTTP_GET, [&net](AsyncWebServerRequest* req) {
     req->send(200, "application/json", scanToJson(net));
   });
@@ -301,9 +310,8 @@ void registerApiRoutes(AsyncWebServer& server, AsyncWebSocket& ws, NetworkHandle
     req->send(200, "application/json", out);
   });
 
-  server.on("/api/reboot", HTTP_POST, [](AsyncWebServerRequest* req) {
+  server.on("/api/reboot", HTTP_POST, [&net](AsyncWebServerRequest* req) {
+    net.requestReboot();   // restarted from the main loop (safe)
     req->send(200, "application/json", "{\"ok\":true}");
-    delay(150);
-    ESP.restart();
   });
 }
