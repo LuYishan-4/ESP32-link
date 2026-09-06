@@ -1,0 +1,50 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    restart: unless-stopped
+    volumes:
+      - ./deploy/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./deploy/mosquitto/certs:/mosquitto/certs:ro
+      - mosquitto-data:/mosquitto/data
+    ports:
+      - "127.0.0.1:1883:1883"
+      - "127.0.0.1:9001:9001"
+
+  host:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      HTTP_ADDR: :8080
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-tcp://mosquitto:1883}
+      MQTT_USERNAME: ${MQTT_USERNAME:?set MQTT_USERNAME}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD}
+      DYNSEC_MQTT_BROKER_URL: ${DYNSEC_MQTT_BROKER_URL:-ssl://mosquitto:8883}
+      DYNSEC_MQTT_USERNAME: ${DYNSEC_MQTT_USERNAME:-}
+      DYNSEC_MQTT_PASSWORD: ${DYNSEC_MQTT_PASSWORD:-}
+      DYNSEC_CA_FILE: ${DYNSEC_CA_FILE:-/run/secrets/mosquitto-ca.crt}
+      CLOUDFLARE_ACCESS_TEAM_DOMAIN: ${CLOUDFLARE_ACCESS_TEAM_DOMAIN:-}
+      CLOUDFLARE_ACCESS_AUDIENCE: ${CLOUDFLARE_ACCESS_AUDIENCE:-}
+    volumes:
+      - ./deploy/mosquitto/certs/ca.crt:/run/secrets/mosquitto-ca.crt:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - mosquitto
+      - host
+      - frontend
+
+volumes:
+  mosquitto-data:
+    name: farmhost-mosquitto-data
