@@ -334,13 +334,6 @@ ninja
 ### 4. Test Without Physical Hardware (Python Simulators)
 You can test the entire UDP provisioning workflow without ESP32 hardware:
 
-```bash
-# 1. Start 3 virtual ESP32 nodes (with simulated timeout and error nodes)
-python windowConfig/tools/esp32_simulator.py --count 3 --timeout-node 2 --error-node 3
-
-# 2. In another terminal, run the automated handshake tester
-python windowConfig/tools/test_udp_handshake.py
-```
 
 ---
 
